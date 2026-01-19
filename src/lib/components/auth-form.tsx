@@ -81,7 +81,7 @@ function ThemeBtn() {
   }
   const Icon = t === "light" ? Sun : t === "dark" ? Moon : Monitor
   return (
-    <div className="fixed bottom-4 right-4" data-theme-menu>
+    <div className="fixed bottom-4 right-4 z-50" data-theme-menu>
       <button
         onClick={() => setOpen(!open)}
         className="flex h-7 w-7 items-center justify-center text-muted-foreground hover:text-foreground"
