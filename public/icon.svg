@@ -1,0 +1,21 @@
+<svg width="180" height="180" viewBox="0 0 180 180" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <style>
+    @media (prefers-color-scheme: light) {
+      .bg { fill: #0f172a; }
+      .ring { stroke: white; }
+      .center { fill: white; }
+    }
+    @media (prefers-color-scheme: dark) {
+      .bg { fill: white; }
+      .ring { stroke: #0f172a; }
+      .center { fill: #0f172a; }
+    }
+  </style>
+  <rect class="bg" width="180" height="180" rx="40"/>
+  <!-- Target rings -->
+  <circle class="ring" cx="90" cy="90" r="60" fill="none" stroke-width="8"/>
+  <circle class="ring" cx="90" cy="90" r="40" fill="none" stroke-width="8"/>
+  <circle class="ring" cx="90" cy="90" r="20" fill="none" stroke-width="8"/>
+  <!-- Center dot -->
+  <circle class="center" cx="90" cy="90" r="8"/>
+</svg>
