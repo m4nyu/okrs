@@ -267,8 +267,8 @@ export function OrgSettings({
       <div className="w-full max-w-md h-[480px] flex flex-col border border-border bg-background overflow-hidden" onClick={e => e.stopPropagation()}>
         <div className="flex justify-between items-center px-4 py-3 border-b border-border select-none flex-shrink-0">
           <span className="text-sm font-medium">{org.name}</span>
-          <button onClick={onClose} className="text-xs text-muted-foreground hover:text-foreground">
-            close
+          <button onClick={onClose} className="text-xs text-muted-foreground hover:text-foreground flex items-center gap-1.5">
+            close <kbd className="px-1 py-0.5 bg-muted font-mono text-[10px]">Esc</kbd>
           </button>
         </div>
         {content}
