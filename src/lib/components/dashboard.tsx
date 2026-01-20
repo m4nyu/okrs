@@ -1,16 +1,16 @@
 "use client"
 
-import React from "react"
-import { useEffect, useState, useCallback } from "react"
+import React, { useState, useEffect, useCallback } from "react"
 import { createClient } from "@/lib/supabase/client"
 import type { User } from "@supabase/supabase-js"
 import type { Objective, KeyResult, ObjectiveWithProgress, Organization, OrgMember, OrgInvite } from "@/lib/types"
 import useSWR from "swr"
 import { Sun, Moon, Monitor, Target, ChevronRight, Plus, Trash2, Sparkles, Loader2, X, Users, Building2, MoreVertical, Circle, Square, Triangle, Diamond, Hexagon } from "lucide-react"
+import { useAppStore } from "@/lib/store"
 import { Drawer, DrawerContent, DrawerHeader, DrawerTitle } from "@/lib/components/ui/drawer"
 import { useIsMobile } from "@/lib/hooks/use-mobile"
-import { ChartContainer, ChartTooltip, ChartTooltipContent } from "@/lib/components/ui/chart"
-import { LineChart, Line, XAxis, YAxis, CartesianGrid, ResponsiveContainer } from "recharts"
+import { ChartContainer, ChartTooltip } from "@/lib/components/ui/chart"
+import { LineChart, Line, XAxis, YAxis, CartesianGrid } from "recharts"
 import { OrgSettings } from "@/lib/components/org-settings"
 import { ScrollArea } from "@/lib/components/ui/scroll-area"
 
@@ -74,41 +74,40 @@ async function fetchData() {
 
 // Theme button component
 function ThemeBtn({ user, supabase, org, onOrgClick }: { user: User; supabase: ReturnType<typeof createClient>; org: Organization; onOrgClick: () => void }) {
-  const [t, setT] = useState<"light" | "dark" | "system">("system")
+  const { theme, setTheme } = useAppStore()
   const [open, setOpen] = useState(false)
 
+  // Initialize theme from store on mount
   useEffect(() => {
-    const s = localStorage.getItem("theme") as "light" | "dark" | "system" | null
-    if (s) setT(s)
-  }, [])
-
-  const select = (v: "light" | "dark" | "system") => {
-    setT(v)
-    localStorage.setItem("theme", v)
-    if (v === "system") {
+    const t = theme
+    if (t === "system") {
       document.documentElement.classList.toggle("dark", window.matchMedia("(prefers-color-scheme: dark)").matches)
     } else {
-      document.documentElement.classList.toggle("dark", v === "dark")
+      document.documentElement.classList.toggle("dark", t === "dark")
     }
+  }, [theme])
+
+  const select = (v: "light" | "dark" | "system") => {
+    setTheme(v)
     setOpen(false)
   }
 
-  const Icon = t === "light" ? Sun : t === "dark" ? Moon : Monitor
+  const Icon = theme === "light" ? Sun : theme === "dark" ? Moon : Monitor
   return (
     <>
       {/* Mobile footer */}
-      <nav className="md:hidden fixed bottom-0 left-0 right-0 border-t border-border bg-background z-40 flex items-center justify-between px-6 h-14 select-none">
+      <nav className="md:hidden fixed bottom-0 left-0 right-0 border-t border-border bg-background z-40 flex items-center justify-between px-4 h-14 select-none">
         <span className="flex items-center gap-2 text-sm font-medium"><Target className="h-4 w-4" />OKR</span>
-        <div className="flex items-center gap-4">
-          <button onClick={onOrgClick} className="p-2 text-muted-foreground hover:text-foreground" title={org.name}>
+        <div className="flex items-center gap-3">
+          <button onClick={onOrgClick} className="text-muted-foreground hover:text-foreground" title={org.name}>
             <Users className="h-4 w-4" />
           </button>
           <div className="relative">
-            <button onClick={() => setOpen(!open)} className="p-2 text-muted-foreground hover:text-foreground"><Icon className="h-4 w-4" /></button>
+            <button onClick={() => setOpen(!open)} className="text-muted-foreground hover:text-foreground"><Icon className="h-4 w-4" /></button>
             {open && (
               <div className="absolute bottom-full right-0 mb-2 border border-border bg-background p-1 flex flex-col min-w-[100px]">
                 {(["light", "dark", "system"] as const).map(v => (
-                  <button key={v} onClick={() => select(v)} className={`px-3 py-1.5 text-xs text-left hover:bg-muted ${t === v ? "text-foreground" : "text-muted-foreground"}`}>{v}</button>
+                  <button key={v} onClick={() => select(v)} className={`px-3 py-1.5 text-xs text-left hover:bg-muted ${theme === v ? "text-foreground" : "text-muted-foreground"}`}>{v}</button>
                 ))}
               </div>
             )}
@@ -116,14 +115,15 @@ function ThemeBtn({ user, supabase, org, onOrgClick }: { user: User; supabase: R
           <button onClick={() => { supabase.auth.signOut(); window.location.reload() }} className="text-xs text-muted-foreground hover:text-foreground">sign out</button>
         </div>
       </nav>
-      {/* Desktop theme button */}
-      <div className="hidden md:block fixed bottom-4 right-4 z-40 select-none">
+      {/* Desktop theme + help buttons */}
+      <div className="hidden md:flex fixed bottom-4 right-4 z-40 select-none gap-1">
+        <button onClick={() => useAppStore.getState().openHelp()} className="w-7 h-7 flex items-center justify-center border border-border bg-background text-muted-foreground hover:text-foreground text-[10px] font-mono">?</button>
         <div className="relative">
-          <button onClick={() => setOpen(!open)} className="p-2 border border-border bg-background text-muted-foreground hover:text-foreground"><Icon className="h-4 w-4" /></button>
+          <button onClick={() => setOpen(!open)} className="w-7 h-7 flex items-center justify-center border border-border bg-background text-muted-foreground hover:text-foreground"><Icon className="h-3.5 w-3.5" /></button>
           {open && (
             <div className="absolute bottom-full right-0 mb-2 border border-border bg-background p-1 flex flex-col min-w-[100px]">
               {(["light", "dark", "system"] as const).map(v => (
-                <button key={v} onClick={() => select(v)} className={`px-3 py-1.5 text-xs text-left hover:bg-muted ${t === v ? "text-foreground" : "text-muted-foreground"}`}>{v}</button>
+                <button key={v} onClick={() => select(v)} className={`px-3 py-1.5 text-xs text-left hover:bg-muted ${theme === v ? "text-foreground" : "text-muted-foreground"}`}>{v}</button>
               ))}
             </div>
           )}
@@ -142,7 +142,7 @@ function DashboardCharts({ objectives, hoveredObj, setHoveredObj }: {
   hoveredObj: string | null;
   setHoveredObj: (id: string | null) => void;
 }) {
-  const [period, setPeriod] = useState<ChartPeriod>("Q")
+  const { chartPeriod: period, setChartPeriod: setPeriod } = useAppStore()
 
   // Calculate period bounds based on selection
   // Current date is always at the left edge, period extends to the right
@@ -314,14 +314,15 @@ function DashboardCharts({ objectives, hoveredObj, setHoveredObj }: {
         <div>
           <div className="flex items-center justify-between mb-4">
             <span className="text-sm font-medium">Status</span>
-            <div className="flex items-center gap-1 text-xs">
+            <div className="flex items-center gap-0.5 text-xs">
               {(["1M", "Q", "Y"] as const).map((p) => (
                 <button
                   key={p}
                   onClick={() => setPeriod(p)}
-                  className={`px-2 py-0.5 transition-colors ${period === p ? "bg-foreground text-background" : "text-muted-foreground hover:text-foreground"}`}
+                  className={`px-1.5 py-0.5 transition-colors flex items-center gap-1 ${period === p ? "bg-foreground text-background" : "text-muted-foreground hover:text-foreground"}`}
                 >
                   {p}
+                  <kbd className={`px-1 py-0.5 font-mono text-[10px] ${period === p ? "bg-background/20" : "bg-muted"}`}>{p === "1M" ? "M" : p}</kbd>
                 </button>
               ))}
             </div>
@@ -717,7 +718,9 @@ function ObjectiveModal({ onClose, onDone, devMode, onDevCreate, editingObjectiv
 
   const footerContent = (
     <div className="flex justify-end gap-3 select-none">
-      <button type="button" onClick={onClose} className="px-4 py-2 text-sm text-muted-foreground hover:text-foreground">Cancel</button>
+      <button type="button" onClick={onClose} className="px-4 py-2 text-sm text-muted-foreground hover:text-foreground flex items-center gap-2">
+        Cancel <kbd className="px-1 py-0.5 bg-muted font-mono text-[10px]">Esc</kbd>
+      </button>
       <button type="submit" disabled={loading || !title.trim() || !description.trim()} className="px-4 py-2 bg-foreground text-background text-sm disabled:opacity-50">
         {loading ? (isEditing ? "Updating..." : "Creating...") : isEditing ? "Update" : `Create${keyResults.filter(k => k.title.trim()).length > 0 ? ` (${keyResults.filter(k => k.title.trim()).length})` : ""}`}
       </button>
@@ -751,8 +754,9 @@ function ObjectiveModal({ onClose, onDone, devMode, onDevCreate, editingObjectiv
       <form onSubmit={submit} className="w-full max-w-md max-h-[85vh] flex flex-col border border-border bg-background" onClick={e => e.stopPropagation()}>
         <div className="flex justify-between items-center p-5 pb-0 select-none flex-shrink-0">
           <span className="font-medium text-sm">{isEditing ? "Edit objective" : "New objective"}</span>
-          <button type="button" onClick={onClose} className="p-1 text-muted-foreground hover:text-foreground">
-            <X className="h-4 w-4" />
+          <button type="button" onClick={onClose} className="flex items-center gap-1.5 text-muted-foreground hover:text-foreground">
+            <X className="h-3.5 w-3.5" />
+            <kbd className="px-1 py-0.5 bg-muted font-mono text-[10px]">Esc</kbd>
           </button>
         </div>
         <div className="px-5 py-4 flex-1">
@@ -826,7 +830,10 @@ function ReportModal({ objective, onClose, onDone, devMode, onDevUpdate }: {
       <div className="w-full max-w-md border border-border bg-background p-6 mx-4" onClick={e => e.stopPropagation()}>
         <div className="flex justify-between items-center mb-4 select-none">
           <span className="font-medium text-sm">Report Progress</span>
-          <button onClick={onClose} className="p-1 text-muted-foreground hover:text-foreground"><X className="h-4 w-4" /></button>
+          <button onClick={onClose} className="flex items-center gap-1.5 text-muted-foreground hover:text-foreground">
+            <X className="h-3.5 w-3.5" />
+            <kbd className="px-1 py-0.5 bg-muted font-mono text-[10px]">Esc</kbd>
+          </button>
         </div>
         <p className="text-sm mb-4">{objective.title}</p>
         <form onSubmit={submit} className="space-y-4">
@@ -852,7 +859,9 @@ function ReportModal({ objective, onClose, onDone, devMode, onDevUpdate }: {
             <input value={note} onChange={e => setNote(e.target.value)} placeholder="What changed?" className="w-full h-9 border border-border bg-transparent px-3 text-sm rounded-md" />
           </div>
           <div className="flex justify-end gap-3 pt-2 select-none">
-            <button type="button" onClick={onClose} className="px-4 py-2 text-sm text-muted-foreground hover:text-foreground">Cancel</button>
+            <button type="button" onClick={onClose} className="px-4 py-2 text-sm text-muted-foreground hover:text-foreground flex items-center gap-2">
+              Cancel <kbd className="px-1 py-0.5 bg-muted font-mono text-[10px]">Esc</kbd>
+            </button>
             <button type="submit" disabled={loading} className="px-4 py-2 bg-foreground text-background text-sm disabled:opacity-50 rounded-md">{loading ? "Saving..." : "Save"}</button>
           </div>
         </form>
@@ -861,22 +870,92 @@ function ReportModal({ objective, onClose, onDone, devMode, onDevUpdate }: {
   )
 }
 
+// Help modal with keyboard shortcuts
+function HelpModal({ onClose }: { onClose: () => void }) {
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50" onClick={onClose}>
+      <div className="w-full max-w-md border border-border bg-background p-6 mx-4" onClick={e => e.stopPropagation()}>
+        <div className="flex justify-between items-center mb-4 select-none">
+          <span className="font-medium text-sm">Keyboard Shortcuts</span>
+          <button onClick={onClose} className="flex items-center gap-1.5 text-muted-foreground hover:text-foreground">
+            <X className="h-3.5 w-3.5" />
+            <kbd className="px-1 py-0.5 bg-muted font-mono text-[10px]">Esc</kbd>
+          </button>
+        </div>
+        <div className="space-y-4 text-xs">
+          <div>
+            <p className="text-muted-foreground mb-2 font-medium">Global</p>
+            <div className="space-y-1">
+              <div className="flex justify-between"><span>New objective</span><kbd className="px-1.5 py-0.5 bg-muted font-mono">{"⌘N"}</kbd></div>
+              <div className="flex justify-between"><span>Settings</span><kbd className="px-1.5 py-0.5 bg-muted font-mono">{"⌘,"}</kbd></div>
+              <div className="flex justify-between"><span>Cycle theme</span><kbd className="px-1.5 py-0.5 bg-muted font-mono">{"⌘."}</kbd></div>
+              <div className="flex justify-between"><span>Close/Cancel</span><kbd className="px-1.5 py-0.5 bg-muted font-mono">Esc</kbd></div>
+              <div className="flex justify-between"><span>Show help</span><kbd className="px-1.5 py-0.5 bg-muted font-mono">?</kbd></div>
+            </div>
+          </div>
+          <div>
+            <p className="text-muted-foreground mb-2 font-medium">Navigation</p>
+            <div className="space-y-1">
+              <div className="flex justify-between"><span>Move down</span><kbd className="px-1.5 py-0.5 bg-muted font-mono">J</kbd> / <kbd className="px-1.5 py-0.5 bg-muted font-mono">↓</kbd></div>
+              <div className="flex justify-between"><span>Move up</span><kbd className="px-1.5 py-0.5 bg-muted font-mono">K</kbd> / <kbd className="px-1.5 py-0.5 bg-muted font-mono">↑</kbd></div>
+              <div className="flex justify-between"><span>Select 1-5</span><kbd className="px-1.5 py-0.5 bg-muted font-mono">1-5</kbd></div>
+            </div>
+          </div>
+          <div>
+            <p className="text-muted-foreground mb-2 font-medium">Chart Period</p>
+            <div className="space-y-1">
+              <div className="flex justify-between"><span>1 Month</span><kbd className="px-1.5 py-0.5 bg-muted font-mono">M</kbd></div>
+              <div className="flex justify-between"><span>Quarter</span><kbd className="px-1.5 py-0.5 bg-muted font-mono">Q</kbd></div>
+              <div className="flex justify-between"><span>Year</span><kbd className="px-1.5 py-0.5 bg-muted font-mono">Y</kbd></div>
+            </div>
+          </div>
+          <div>
+            <p className="text-muted-foreground mb-2 font-medium">Actions (with selection)</p>
+            <div className="space-y-1">
+              <div className="flex justify-between"><span>Expand/Collapse</span><kbd className="px-1.5 py-0.5 bg-muted font-mono">Enter</kbd> / <kbd className="px-1.5 py-0.5 bg-muted font-mono">X</kbd></div>
+              <div className="flex justify-between"><span>Report progress</span><kbd className="px-1.5 py-0.5 bg-muted font-mono">R</kbd></div>
+              <div className="flex justify-between"><span>Edit</span><kbd className="px-1.5 py-0.5 bg-muted font-mono">E</kbd></div>
+              <div className="flex justify-between"><span>Delete</span><kbd className="px-1.5 py-0.5 bg-muted font-mono">D</kbd></div>
+              <div className="flex justify-between"><span>Open settings</span><kbd className="px-1.5 py-0.5 bg-muted font-mono">O</kbd></div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  )
+}
+
 export function Dashboard({ user, org, orgRole, devMode }: Props) {
-  const [modal, setModal] = useState(false)
-  const [reportObj, setReportObj] = useState<Objective | null>(null)
-  const [editObj, setEditObj] = useState<Objective | null>(null)
-  const [menuOpen, setMenuOpen] = useState<string | null>(null)
-  const [hoveredObj, setHoveredObj] = useState<string | null>(null)
-  const [expanded, setExpanded] = useState<Set<string>>(new Set())
-  const [orgSettingsOpen, setOrgSettingsOpen] = useState(false)
-  const [orgMembers, setOrgMembers] = useState<OrgMember[]>([])
-  const [orgInvites, setOrgInvites] = useState<OrgInvite[]>([])
+  // Zustand store
+  const {
+    showObjectiveModal, showReportModal, showOrgSettings, showHelp,
+    editingObjective, reportingObjective,
+    selectedIdx, hoveredObjId, expandedIds, menuOpenId,
+    objectives: storeObjectives, orgMembers, orgInvites,
+    setObjectives, setOrgMembers, setOrgInvites,
+    openObjectiveModal, closeObjectiveModal,
+    openReportModal, closeReportModal,
+    openOrgSettings, closeOrgSettings,
+    openHelp, closeHelp, closeAllModals,
+    setSelectedIdx, setHoveredObjId, toggleExpanded, setMenuOpenId,
+    selectNext, selectPrev, selectByNumber,
+    setChartPeriod, cycleTheme,
+  } = useAppStore()
+
   const [devObjectives, setDevObjectives] = useState<Objective[]>([])
   const { data: dbObjectives = [], mutate } = useSWR(devMode ? null : "objectives", fetchData)
-  const objectives = devMode ? devObjectives : dbObjectives
   const supabase = createClient()
   const isAdmin = orgRole === "owner" || orgRole === "admin"
-  
+
+  // Sync fetched objectives to store
+  useEffect(() => {
+    if (!devMode && dbObjectives.length > 0) {
+      setObjectives(dbObjectives)
+    }
+  }, [dbObjectives, devMode, setObjectives])
+
+  const objectives = devMode ? devObjectives : storeObjectives.length > 0 ? storeObjectives : dbObjectives
+
   // Dev mode: custom mutate function to update local state
   const devMutate = useCallback((newObjectives?: Objective[]) => {
     if (newObjectives) setDevObjectives(newObjectives)
@@ -884,7 +963,7 @@ export function Dashboard({ user, org, orgRole, devMode }: Props) {
 
   // Fetch org members and invites when org settings is opened (skip in dev mode)
   useEffect(() => {
-    if (orgSettingsOpen && org && !devMode) {
+    if (showOrgSettings && org && !devMode) {
       Promise.all([
         import("@/lib/actions").then(m => m.getOrgMembers(org.id)),
         import("@/lib/actions").then(m => m.getOrgInvites(org.id))
@@ -893,36 +972,126 @@ export function Dashboard({ user, org, orgRole, devMode }: Props) {
         setOrgInvites(invites)
       })
     }
-  }, [orgSettingsOpen, org, devMode])
+  }, [showOrgSettings, org, devMode, setOrgMembers, setOrgInvites])
 
   const canAddObjective = objectives.length < MAX_OBJECTIVES
 
-  const onKey = useCallback((e: KeyboardEvent) => {
-    if ((e.metaKey || e.ctrlKey) && e.key === "n") { e.preventDefault(); if (canAddObjective) setModal(true) }
-    if (e.key === "Escape") { setModal(false); setReportObj(null); setEditObj(null); setMenuOpen(null); setOrgSettingsOpen(false) }
-  }, [canAddObjective])
-
-  useEffect(() => {
-    window.addEventListener("keydown", onKey)
-    return () => window.removeEventListener("keydown", onKey)
-  }, [onKey])
-
-  const toggle = (id: string) => {
-    setExpanded(prev => {
-      const next = new Set(prev)
-      next.has(id) ? next.delete(id) : next.add(id)
-      return next
-    })
-  }
-
-  const deleteObj = async (id: string) => {
+  const deleteObj = useCallback(async (id: string) => {
     if (devMode) {
       setDevObjectives(prev => prev.filter(o => o.id !== id))
       return
     }
     await supabase.from("objectives").delete().eq("id", id)
     mutate()
-  }
+  }, [devMode, supabase, mutate])
+
+  const onKey = useCallback((e: KeyboardEvent) => {
+    // Skip if typing in input/textarea
+    const tag = (e.target as HTMLElement)?.tagName
+    const isInput = tag === "INPUT" || tag === "TEXTAREA" || tag === "SELECT"
+
+    // Global shortcuts (work even in inputs)
+    if (e.key === "Escape") {
+      e.preventDefault()
+      if (showHelp) { closeHelp(); return }
+      if (menuOpenId) { setMenuOpenId(null); return }
+      if (showObjectiveModal) { closeObjectiveModal(); return }
+      if (showReportModal) { closeReportModal(); return }
+      if (showOrgSettings) { closeOrgSettings(); return }
+      setSelectedIdx(-1)
+      return
+    }
+
+    // Cmd shortcuts
+    if (e.metaKey || e.ctrlKey) {
+      if (e.key === "n") { e.preventDefault(); if (canAddObjective && !showObjectiveModal && !showReportModal) openObjectiveModal() }
+      if (e.key === ",") { e.preventDefault(); if (!showOrgSettings) openOrgSettings() }
+      if (e.key === ".") { e.preventDefault(); cycleTheme() }
+      return
+    }
+
+    // Skip rest if in input or modal open
+    if (isInput || showObjectiveModal || showReportModal || showOrgSettings || showHelp) return
+
+    // Help
+    if (e.key === "?" || (e.shiftKey && e.key === "/")) { e.preventDefault(); openHelp(); return }
+
+    // Chart period shortcuts
+    if (e.key === "m" || e.key === "M") { e.preventDefault(); setChartPeriod("1M"); return }
+    if (e.key === "q" || e.key === "Q") { e.preventDefault(); setChartPeriod("Q"); return }
+    if (e.key === "y" || e.key === "Y") { e.preventDefault(); setChartPeriod("Y"); return }
+
+    // Number keys to select objective (1-5)
+    if (e.key >= "1" && e.key <= "5") {
+      e.preventDefault()
+      selectByNumber(parseInt(e.key))
+      return
+    }
+
+    // J/K navigation
+    if (e.key === "j" || e.key === "ArrowDown") {
+      e.preventDefault()
+      selectNext()
+      return
+    }
+    if (e.key === "k" || e.key === "ArrowUp") {
+      e.preventDefault()
+      selectPrev()
+      return
+    }
+
+    // Actions on selected objective
+    if (selectedIdx >= 0 && selectedIdx < objectives.length) {
+      const obj = objectives[selectedIdx]
+
+      // Enter/Space/X - toggle expand
+      if (e.key === "Enter" || e.key === " " || e.key === "x" || e.key === "X") {
+        e.preventDefault()
+        toggleExpanded(obj.id)
+        return
+      }
+
+      // R - report progress
+      if (e.key === "r" || e.key === "R") {
+        e.preventDefault()
+        openReportModal(obj)
+        return
+      }
+
+      // E - edit (admin only)
+      if ((e.key === "e" || e.key === "E") && isAdmin) {
+        e.preventDefault()
+        openObjectiveModal(obj)
+        return
+      }
+
+      // D/Delete/Backspace - delete (admin only)
+      if ((e.key === "d" || e.key === "D" || e.key === "Delete" || e.key === "Backspace") && isAdmin) {
+        e.preventDefault()
+        if (confirm(`Delete "${obj.title}"?`)) deleteObj(obj.id)
+        return
+      }
+    }
+
+    // O - open settings
+    if (e.key === "o" || e.key === "O") {
+      e.preventDefault()
+      openOrgSettings()
+      return
+    }
+
+  }, [
+    canAddObjective, objectives, selectedIdx, showObjectiveModal, showReportModal,
+    showOrgSettings, showHelp, menuOpenId, isAdmin, deleteObj,
+    closeHelp, setMenuOpenId, closeObjectiveModal, closeReportModal, closeOrgSettings,
+    setSelectedIdx, openObjectiveModal, openOrgSettings, cycleTheme, openHelp,
+    setChartPeriod, selectByNumber, selectNext, selectPrev, toggleExpanded, openReportModal
+  ])
+
+  useEffect(() => {
+    window.addEventListener("keydown", onKey)
+    return () => window.removeEventListener("keydown", onKey)
+  }, [onKey])
 
   const active = objectives.filter(o => o.status === "active").length
   const completed = objectives.filter(o => o.overall_progress >= 100).length
@@ -935,9 +1104,10 @@ export function Dashboard({ user, org, orgRole, devMode }: Props) {
         <div className="mx-auto flex h-12 max-w-3xl lg:max-w-5xl xl:max-w-6xl items-center justify-between px-6 text-sm">
           <span className="flex items-center gap-2 font-medium"><Target className="h-4 w-4" />OKR</span>
           <div className="flex items-center gap-4 text-xs text-muted-foreground">
-            <button onClick={() => setOrgSettingsOpen(true)} className="flex items-center gap-1.5 hover:text-foreground">
+            <button onClick={() => openOrgSettings()} className="flex items-center gap-1.5 hover:text-foreground">
               <Building2 className="h-3.5 w-3.5" />
               {org.name}
+              <kbd className="px-1 py-0.5 bg-muted font-mono text-[10px]">⌘,</kbd>
             </button>
             <span>{user.email}</span>
             <button onClick={() => { supabase.auth.signOut(); window.location.reload() }} className="hover:text-foreground">sign out</button>
@@ -946,17 +1116,17 @@ export function Dashboard({ user, org, orgRole, devMode }: Props) {
       </header>
 
       {/* Theme button (mobile footer + desktop bottom-right) */}
-      <ThemeBtn user={user} supabase={supabase} org={org} onOrgClick={() => setOrgSettingsOpen(true)} />
+      <ThemeBtn user={user} supabase={supabase} org={org} onOrgClick={() => openOrgSettings()} />
 
       <main className="flex-1 flex flex-col overflow-hidden pb-14 md:pb-0">
         {/* Charts - fixed */}
         <div className="mx-auto w-full max-w-3xl lg:max-w-5xl xl:max-w-6xl px-6 pt-8 flex-shrink-0">
-          <DashboardCharts objectives={objectives} hoveredObj={hoveredObj} setHoveredObj={setHoveredObj} />
+          <DashboardCharts objectives={objectives} hoveredObj={hoveredObjId} setHoveredObj={setHoveredObjId} />
 
           <div className="flex items-center justify-between mb-4 select-none">
             <h2 className="text-sm font-medium">Objectives</h2>
             <button
-              onClick={() => canAddObjective && setModal(true)}
+              onClick={() => canAddObjective && openObjectiveModal()}
               disabled={!canAddObjective}
               className={`flex items-center gap-1.5 text-xs ${canAddObjective ? "text-muted-foreground hover:text-foreground" : "text-muted-foreground/50 cursor-not-allowed"}`}
               title={!canAddObjective ? `Maximum ${MAX_OBJECTIVES} objectives reached` : undefined}
@@ -975,19 +1145,20 @@ export function Dashboard({ user, org, orgRole, devMode }: Props) {
           ) : (
             <div>
               {objectives.map((obj, i) => {
-                const isHovered = hoveredObj === obj.id
-                const isOtherHovered = hoveredObj !== null && hoveredObj !== obj.id
+                const isHovered = hoveredObjId === obj.id
+                const isOtherHovered = hoveredObjId !== null && hoveredObjId !== obj.id
+                const isSelected = selectedIdx === i
 
                 return (
                   <div
                     key={obj.id}
-                    onMouseEnter={() => setHoveredObj(obj.id)}
-                    onMouseLeave={() => setHoveredObj(null)}
-                    className={`transition-opacity ${isOtherHovered ? "opacity-30" : ""}`}
+                    onMouseEnter={() => setHoveredObjId(obj.id)}
+                    onMouseLeave={() => setHoveredObjId(null)}
+                    className={`transition-opacity ${isOtherHovered ? "opacity-30" : ""} ${isSelected ? "ring-1 ring-foreground/20" : ""}`}
                   >
                     <div className="group flex items-center gap-3 px-4 py-2">
-                      <button onClick={() => toggle(obj.id)} className="text-muted-foreground hover:text-foreground">
-                        <ChevronRight className={`h-4 w-4 transition-transform ${expanded.has(obj.id) ? "rotate-90" : ""}`} />
+                      <button onClick={() => toggleExpanded(obj.id)} className="text-muted-foreground hover:text-foreground" title="Expand/Collapse (X)">
+                        <ChevronRight className={`h-4 w-4 transition-transform ${expandedIds.has(obj.id) ? "rotate-90" : ""}`} />
                       </button>
                       {(() => {
                         const IconComponent = OKR_ICONS[i % OKR_ICONS.length]
@@ -1005,32 +1176,34 @@ export function Dashboard({ user, org, orgRole, devMode }: Props) {
                         )}
                       </div>
                       <span data-tooltip="Overall progress" className="text-xs font-mono text-muted-foreground hover:text-foreground transition-colors leading-none">{obj.overall_progress.toFixed(0)}%</span>
-                      <button onClick={() => setReportObj(obj)} className="text-xs text-muted-foreground hover:text-foreground transition-colors leading-none">
-                        report
+                      <button onClick={() => openReportModal(obj)} className="text-xs text-muted-foreground hover:text-foreground transition-colors leading-none flex items-center gap-1">
+                        report <kbd className="px-1 py-0.5 bg-muted font-mono text-[10px]">R</kbd>
                       </button>
                       {isAdmin && (
                         <div className="relative opacity-0 group-hover:opacity-100 transition-opacity flex items-center">
                           <button
-                            onClick={() => setMenuOpen(menuOpen === obj.id ? null : obj.id)}
+                            onClick={() => setMenuOpenId(menuOpenId === obj.id ? null : obj.id)}
                             className="text-muted-foreground hover:text-foreground"
                           >
                             <MoreVertical className="h-4 w-4" />
                           </button>
-                          {menuOpen === obj.id && (
+                          {menuOpenId === obj.id && (
                             <>
-                              <div className="fixed inset-0 z-40" onClick={() => setMenuOpen(null)} />
+                              <div className="fixed inset-0 z-40" onClick={() => setMenuOpenId(null)} />
                               <div className="absolute right-0 top-full mt-1 z-50 min-w-[120px] bg-popover border border-border rounded-md shadow-md py-1">
-                                <button 
-                                  onClick={() => { setEditObj(obj); setMenuOpen(null) }} 
-                                  className="w-full px-3 py-1.5 text-left text-sm hover:bg-muted/50"
+                                <button
+                                  onClick={() => { openObjectiveModal(obj); setMenuOpenId(null) }}
+                                  className="w-full px-3 py-1.5 text-left text-sm hover:bg-muted/50 flex items-center justify-between"
                                 >
-                                  Edit
+                                  <span>Edit</span>
+                                  <kbd className="text-[10px] text-muted-foreground font-mono">E</kbd>
                                 </button>
-                                <button 
-                                  onClick={() => { deleteObj(obj.id); setMenuOpen(null) }} 
-                                  className="w-full px-3 py-1.5 text-left text-sm text-red-400 hover:bg-muted/50"
+                                <button
+                                  onClick={() => { deleteObj(obj.id); setMenuOpenId(null) }}
+                                  className="w-full px-3 py-1.5 text-left text-sm text-red-400 hover:bg-muted/50 flex items-center justify-between"
                                 >
-                                  Delete
+                                  <span>Delete</span>
+                                  <kbd className="text-[10px] text-muted-foreground font-mono">D</kbd>
                                 </button>
                               </div>
                             </>
@@ -1038,7 +1211,7 @@ export function Dashboard({ user, org, orgRole, devMode }: Props) {
                         </div>
                       )}
                     </div>
-                    {expanded.has(obj.id) && (
+                    {expandedIds.has(obj.id) && (
                       <div className="px-4 pb-1 pl-11">
                         {obj.description && <p className="text-xs text-muted-foreground mb-1">{obj.description}</p>}
                         <div>
@@ -1089,33 +1262,28 @@ export function Dashboard({ user, org, orgRole, devMode }: Props) {
         </div>
       </main>
 
-      {modal && <ObjectiveModal 
-        onClose={() => setModal(false)} 
-        onDone={() => { setModal(false); if (!devMode) mutate() }}
+      {showObjectiveModal && <ObjectiveModal
+        onClose={closeObjectiveModal}
+        onDone={() => { closeObjectiveModal(); if (!devMode) mutate() }}
         devMode={devMode}
+        editingObjective={editingObjective}
         onDevCreate={(obj) => setDevObjectives(prev => [obj, ...prev])}
+        onDevUpdate={(updatedObj) => setDevObjectives(prev => prev.map(o => o.id === updatedObj.id ? updatedObj : o))}
       />}
-      {reportObj && <ReportModal 
-        objective={reportObj} 
-        onClose={() => setReportObj(null)} 
-        onDone={() => { setReportObj(null); if (!devMode) mutate() }}
+      {showReportModal && reportingObjective && <ReportModal
+        objective={reportingObjective}
+        onClose={closeReportModal}
+        onDone={() => { closeReportModal(); if (!devMode) mutate() }}
         devMode={devMode}
         onDevUpdate={(updatedObj) => setDevObjectives(prev => prev.map(o => o.id === updatedObj.id ? updatedObj : o))}
       />}
-      {editObj && <ObjectiveModal 
-        onClose={() => setEditObj(null)} 
-        onDone={() => { setEditObj(null); if (!devMode) mutate() }}
-        devMode={devMode}
-        editingObjective={editObj}
-        onDevUpdate={(updatedObj) => setDevObjectives(prev => prev.map(o => o.id === updatedObj.id ? updatedObj : o))}
-      />}
-      {orgSettingsOpen && (
+      {showOrgSettings && (
         <OrgSettings
           org={org}
           members={orgMembers}
           invites={orgInvites}
           currentUserRole={orgRole}
-          onClose={() => setOrgSettingsOpen(false)}
+          onClose={closeOrgSettings}
           onInvite={async (email, role) => {
             const { inviteToOrg } = await import("@/lib/actions")
             const result = await inviteToOrg(email, role)
@@ -1149,6 +1317,7 @@ export function Dashboard({ user, org, orgRole, devMode }: Props) {
           }}
         />
       )}
+      {showHelp && <HelpModal onClose={closeHelp} />}
     </div>
   )
 }
