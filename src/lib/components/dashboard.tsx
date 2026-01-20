@@ -857,36 +857,11 @@ export function Dashboard({ user, org, orgRole, devMode }: Props) {
           ) : (
             <div>
               {objectives.map((obj, i) => {
-                const krs = obj.key_results || []
-                const events: { time: number; krId: string; value: number; target: number }[] = []
-                krs.forEach(kr => {
-                  const updates = (kr as any).progress_updates || []
-                  events.push({ time: new Date(obj.created_at).getTime(), krId: kr.id, value: 0, target: kr.target_value })
-                  updates.forEach((u: any) => {
-                    events.push({ time: new Date(u.created_at).getTime(), krId: kr.id, value: u.new_value, target: kr.target_value })
-                  })
-                })
-                events.sort((a, b) => a.time - b.time)
-                const krState: Record<string, { value: number; target: number }> = {}
-                const sparkData: { x: number; remaining: number }[] = []
-                events.forEach((e, idx) => {
-                  krState[e.krId] = { value: e.value, target: e.target }
-                  const totalProgress = Object.values(krState).reduce((sum, kr) => sum + (kr.value / kr.target) * 100, 0)
-                  const avgProgress = Object.keys(krState).length ? totalProgress / Object.keys(krState).length : 0
-                  sparkData.push({ x: idx, remaining: 100 - avgProgress })
-                })
-                if (sparkData.length < 2) {
-                  // For new objectives or ones with no updates, show current state
-                  const remaining = Math.max(0, 100 - obj.overall_progress)
-                  sparkData.length = 0
-                  sparkData.push({ x: 0, remaining: 100 }, { x: 1, remaining })
-                }
-
                 const isHovered = hoveredObj === obj.id
                 const isOtherHovered = hoveredObj !== null && hoveredObj !== obj.id
-                
+
                 return (
-                  <div 
+                  <div
                     key={obj.id}
                     onMouseEnter={() => setHoveredObj(obj.id)}
                     onMouseLeave={() => setHoveredObj(null)}
@@ -900,24 +875,26 @@ export function Dashboard({ user, org, orgRole, devMode }: Props) {
                         const IconComponent = OKR_ICONS[i % OKR_ICONS.length]
                         return <IconComponent strokeWidth={0} className={`h-2.5 w-2.5 flex-shrink-0 ${CHART_FILL_CLASSES[i % CHART_FILL_CLASSES.length]}`} />
                       })()}
-                      <div className="flex-1 min-w-0"><span className="text-sm">{obj.title}</span></div>
-                      <div className="w-10 text-xs font-mono text-muted-foreground text-right">{obj.overall_progress.toFixed(0)}%</div>
-                      <div className="w-16 h-6 flex-shrink-0">
-                        <ResponsiveContainer width="100%" height="100%">
-                          <LineChart data={sparkData} margin={{ top: 2, right: 2, bottom: 2, left: 2 }}>
-                            <YAxis domain={[0, 100]} hide />
-                            <Line type="monotone" dataKey="remaining" stroke="currentColor" strokeWidth={1.5} dot={false} className="text-foreground/50" />
-                          </LineChart>
-                        </ResponsiveContainer>
+                      <div className="min-w-0"><span className="text-sm">{obj.title}</span></div>
+                      <div className="flex-1 flex items-center justify-center">
+                        {obj.key_results.length > 0 && (
+                          <div className="flex items-center gap-6 text-xs font-mono text-muted-foreground">
+                            {obj.key_results.slice(0, 4).map((kr) => (
+                              <span key={kr.id} data-tooltip={kr.title} className="hover:text-foreground transition-colors">{kr.current_value}/{kr.target_value}{kr.unit}</span>
+                            ))}
+                            {obj.key_results.length > 4 && <span data-tooltip={obj.key_results.slice(4).map(kr => kr.title).join(", ")} className="hover:text-foreground transition-colors">+{obj.key_results.length - 4}</span>}
+                          </div>
+                        )}
                       </div>
-                      <button onClick={() => setReportObj(obj)} className="text-xs text-muted-foreground hover:text-foreground opacity-0 group-hover:opacity-100 transition-opacity">
+                      <span data-tooltip="Overall progress" className="text-xs font-mono text-muted-foreground hover:text-foreground transition-colors leading-none">{obj.overall_progress.toFixed(0)}%</span>
+                      <button onClick={() => setReportObj(obj)} className="text-xs text-muted-foreground hover:text-foreground transition-colors leading-none">
                         report
                       </button>
                       {isAdmin && (
-                        <div className="relative opacity-0 group-hover:opacity-100 transition-opacity">
-                          <button 
-                            onClick={() => setMenuOpen(menuOpen === obj.id ? null : obj.id)} 
-                            className="p-1 text-muted-foreground hover:text-foreground"
+                        <div className="relative opacity-0 group-hover:opacity-100 transition-opacity flex items-center">
+                          <button
+                            onClick={() => setMenuOpen(menuOpen === obj.id ? null : obj.id)}
+                            className="text-muted-foreground hover:text-foreground"
                           >
                             <MoreVertical className="h-4 w-4" />
                           </button>
