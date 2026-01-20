@@ -53,7 +53,21 @@ async function fetchData() {
       ...kr,
       progress_updates: (kr.progress_updates || []).sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime())
     }))
-  const p = krs.length ? krs.reduce((a, k) => a + Math.min((k.current_value / k.target_value) * 100, 100), 0) / krs.length : 0
+  // Calculate progress for each KR (handles both increase and decrease metrics)
+  const percentages = krs.map(k => {
+    if (k.target_value === 0) return 0
+    // If current <= target: normal progress (increase metric)
+    // If current > target: inverse progress (decrease metric, e.g., reduce response time)
+    return k.current_value <= k.target_value
+      ? Math.min((k.current_value / k.target_value) * 100, 100)
+      : Math.min((k.target_value / k.current_value) * 100, 100)
+  })
+  // Use median instead of average
+  percentages.sort((a, b) => a - b)
+  const mid = Math.floor(percentages.length / 2)
+  const p = percentages.length === 0 ? 0
+    : percentages.length % 2 !== 0 ? percentages[mid]
+    : (percentages[mid - 1] + percentages[mid]) / 2
   return { ...obj, key_results: krsWithSortedUpdates, overall_progress: Math.min(p, 100) } as ObjectiveWithProgress
   })
 }
@@ -119,100 +133,163 @@ function ThemeBtn({ user, supabase, org, onOrgClick }: { user: User; supabase: R
   )
 }
 
+// Period types for chart view
+type ChartPeriod = "1M" | "Q" | "Y"
+
 // Dashboard charts component with burndown
-function DashboardCharts({ objectives, hoveredObj, setHoveredObj }: { 
-  objectives: ObjectiveWithProgress[]; 
+function DashboardCharts({ objectives, hoveredObj, setHoveredObj }: {
+  objectives: ObjectiveWithProgress[];
   hoveredObj: string | null;
   setHoveredObj: (id: string | null) => void;
 }) {
+  const [period, setPeriod] = useState<ChartPeriod>("Q")
+
+  // Calculate period bounds based on selection
+  // Current date is always at the left edge, period extends to the right
+  const getPeriodBounds = () => {
+    const now = new Date()
+    const todayOnly = new Date(now.getFullYear(), now.getMonth(), now.getDate())
+
+    let endDate: Date
+
+    switch (period) {
+      case "1M":
+        endDate = new Date(todayOnly)
+        endDate.setMonth(endDate.getMonth() + 1)
+        break
+      case "Q":
+        endDate = new Date(todayOnly)
+        endDate.setMonth(endDate.getMonth() + 3)
+        break
+      case "Y":
+        endDate = new Date(todayOnly)
+        endDate.setFullYear(endDate.getFullYear() + 1)
+        break
+    }
+
+    return { startDate: todayOnly, endDate, todayOnly }
+  }
+
   // Generate burndown data for each objective
   const generateBurndownData = () => {
     if (objectives.length === 0) return []
-    
-    // Find date range across all objectives
-    const now = new Date()
-    const allDates = objectives.flatMap(obj => {
-      const created = new Date(obj.created_at)
-      const end = obj.end_date ? new Date(obj.end_date) : new Date(now.getTime() + 30 * 24 * 60 * 60 * 1000)
-      return [created, end]
-    })
-    
-    const minDate = new Date(Math.min(...allDates.map(d => d.getTime())))
-    const maxDate = new Date(Math.max(...allDates.map(d => d.getTime()), now.getTime()))
-    
-    // Generate timeline points (weekly intervals + objective start dates + today)
-    const pointsSet = new Set<number>()
 
-    // Add weekly intervals
-    const current = new Date(minDate)
-    current.setHours(0, 0, 0, 0)
-    while (current <= maxDate) {
-      pointsSet.add(current.getTime())
-      current.setDate(current.getDate() + 7)
+    const { startDate, endDate, todayOnly } = getPeriodBounds()
+
+    // Generate regular interval points based on period
+    const points: Date[] = []
+    const current = new Date(startDate)
+
+    // Determine interval based on period (daily granularity for smooth lines)
+    const intervalDays = 1
+
+    while (current <= endDate) {
+      points.push(new Date(current))
+      current.setDate(current.getDate() + intervalDays)
     }
 
-    // Add each objective's creation date (normalized to start of day)
+    // Ensure end date is included
+    if (points[points.length - 1]?.getTime() !== endDate.getTime()) {
+      points.push(new Date(endDate))
+    }
+
+    // Also add key dates: objective creation dates and progress update dates (only up to today)
     objectives.forEach(obj => {
       const created = new Date(obj.created_at)
       created.setHours(0, 0, 0, 0)
-      pointsSet.add(created.getTime())
+      if (created >= startDate && created <= endDate && created <= todayOnly) {
+        // Check if this date is not already in points (within 1 day tolerance)
+        const exists = points.some(p => Math.abs(p.getTime() - created.getTime()) < 86400000)
+        if (!exists) points.push(created)
+      }
+
+      obj.key_results.forEach(kr => {
+        const updates = (kr as any).progress_updates || []
+        updates.forEach((u: any) => {
+          const updateDate = new Date(u.created_at)
+          updateDate.setHours(0, 0, 0, 0)
+          if (updateDate >= startDate && updateDate <= todayOnly && updateDate <= endDate) {
+            const exists = points.some(p => Math.abs(p.getTime() - updateDate.getTime()) < 86400000)
+            if (!exists) points.push(updateDate)
+          }
+        })
+      })
     })
 
-    // Add today (normalized to start of day)
-    const today = new Date(now)
-    today.setHours(0, 0, 0, 0)
-    pointsSet.add(today.getTime())
+    // Sort all points
+    points.sort((a, b) => a.getTime() - b.getTime())
 
-    // Sort and convert back to dates
-    const points = Array.from(pointsSet).sort((a, b) => a - b).map(ts => new Date(ts))
-    
+    // Helper to calculate progress at a given date
+    const calculateProgressAtDate = (obj: ObjectiveWithProgress, targetDate: Date): number => {
+      const krProgresses: number[] = []
+      obj.key_results.forEach(kr => {
+        const updates = (kr as any).progress_updates || []
+        const relevantUpdates = updates.filter((u: any) => {
+          const uDate = new Date(u.created_at)
+          uDate.setHours(0, 0, 0, 0)
+          return uDate <= targetDate
+        })
+        if (relevantUpdates.length > 0) {
+          const latestUpdate = relevantUpdates.sort((a: any, b: any) =>
+            new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
+          )[0]
+          const val = latestUpdate.new_value
+          const target = kr.target_value
+          if (target === 0) {
+            krProgresses.push(0)
+          } else if (val <= target) {
+            krProgresses.push(Math.min((val / target) * 100, 100))
+          } else {
+            krProgresses.push(Math.min((target / val) * 100, 100))
+          }
+        } else {
+          krProgresses.push(0)
+        }
+      })
+      if (krProgresses.length === 0) return 0
+      krProgresses.sort((a, b) => a - b)
+      const mid = Math.floor(krProgresses.length / 2)
+      return krProgresses.length % 2 !== 0
+        ? krProgresses[mid]
+        : (krProgresses[mid - 1] + krProgresses[mid]) / 2
+    }
+
     // Build data for each point
     return points.map(date => {
-      const entry: Record<string, number | string | number> = {
+      const entry: Record<string, number | string | null> = {
         date: date.toLocaleDateString("en-US", { month: "short", day: "numeric" }),
         _timestamp: date.getTime()
       }
-      
+
       objectives.forEach((obj, idx) => {
         const objCreated = new Date(obj.created_at)
-        const objEnd = obj.end_date ? new Date(obj.end_date) : maxDate
-
-        // Compare dates only (ignore time of day)
+        objCreated.setHours(0, 0, 0, 0)
         const dateOnly = new Date(date.getFullYear(), date.getMonth(), date.getDate())
-        const objCreatedOnly = new Date(objCreated.getFullYear(), objCreated.getMonth(), objCreated.getDate())
 
-        if (dateOnly < objCreatedOnly) {
+        if (dateOnly > todayOnly) {
+          // Future date - don't show line (extends X-axis only)
+          entry[`obj${idx}`] = null
+        } else if (dateOnly < objCreated) {
           // Before objective started - don't show line
-          entry[`obj${idx}`] = null as any
-        } else if (dateOnly.getTime() === objCreatedOnly.getTime()) {
-          // At start date - begin at 0%
+          entry[`obj${idx}`] = null
+        } else if (dateOnly.getTime() === objCreated.getTime()) {
+          // At objective start date - begin at 0%
           entry[`obj${idx}`] = 0
-        } else if (date >= objEnd || date >= now) {
-          // After end date or at/after today - show actual progress
-          entry[`obj${idx}`] = Math.min(obj.overall_progress, 100)
+        } else if (objCreated < startDate && dateOnly.getTime() === startDate.getTime()) {
+          // Objective started before period - show progress at period start
+          entry[`obj${idx}`] = calculateProgressAtDate(obj, startDate)
         } else {
-          // During objective timeline - calculate progress at this point
-          let progressAtDate = 0
-          obj.key_results.forEach(kr => {
-            const updates = (kr as any).progress_updates || []
-            const relevantUpdates = updates.filter((u: any) => new Date(u.created_at) <= date)
-            if (relevantUpdates.length > 0) {
-              const latestUpdate = relevantUpdates.sort((a: any, b: any) =>
-                new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
-              )[0]
-              progressAtDate += (latestUpdate.new_value / kr.target_value) * 100
-            }
-          })
-          entry[`obj${idx}`] = obj.key_results.length > 0 ? Math.min(progressAtDate / obj.key_results.length, 100) : 0
+          // Calculate progress at this point
+          entry[`obj${idx}`] = calculateProgressAtDate(obj, dateOnly)
         }
       })
-      
+
       return entry
     })
   }
 
-  const burndownData = generateBurndownData()
-  
+  const burndownData = React.useMemo(() => generateBurndownData(), [period, objectives])
+
   // Colors for different objectives
   const colors = CHART_COLORS
 
@@ -227,13 +304,8 @@ function DashboardCharts({ objectives, hoveredObj, setHoveredObj }: {
     }
   })
 
-  // Find current position index in data (closest to today)
-  const nowTs = Date.now()
-  const currentIdx = burndownData.findIndex((d, i) => {
-    if (i === burndownData.length - 1) return true
-    const nextTs = (burndownData[i + 1] as any)?._timestamp || nowTs
-    return nextTs > nowTs
-  })
+  // Today is always at index 0 since the period starts from today
+  const todayIdx = 0
 
   return (
     <div className="mb-8">
@@ -242,9 +314,20 @@ function DashboardCharts({ objectives, hoveredObj, setHoveredObj }: {
         <div>
           <div className="flex items-center justify-between mb-4">
             <span className="text-sm font-medium">Status</span>
+            <div className="flex items-center gap-1 text-xs">
+              {(["1M", "Q", "Y"] as const).map((p) => (
+                <button
+                  key={p}
+                  onClick={() => setPeriod(p)}
+                  className={`px-2 py-0.5 transition-colors ${period === p ? "bg-foreground text-background" : "text-muted-foreground hover:text-foreground"}`}
+                >
+                  {p}
+                </button>
+              ))}
+            </div>
           </div>
           <ChartContainer config={chartConfig} className="h-64 w-full">
-            <LineChart data={burndownData} margin={{ top: 10, right: 10, left: 0, bottom: 0 }}>
+            <LineChart data={burndownData} margin={{ top: 10, right: 10, left: 0, bottom: 0 }} style={{ transition: 'none' }}>
               <CartesianGrid strokeDasharray="3 3" className="stroke-border" />
               <XAxis
                 dataKey="date"
@@ -252,6 +335,7 @@ function DashboardCharts({ objectives, hoveredObj, setHoveredObj }: {
                 tickLine={false}
                 axisLine={false}
                 className="text-muted-foreground"
+                interval={period === "1M" ? 2 : period === "Q" ? 6 : 13}
               />
               <YAxis
                 domain={[0, 100]}
@@ -264,8 +348,33 @@ function DashboardCharts({ objectives, hoveredObj, setHoveredObj }: {
                 width={40}
                 reversed
               />
-              <ChartTooltip 
-                content={<ChartTooltipContent hideLabel />}
+              <ChartTooltip
+                content={({ active, payload }) => {
+                  if (!active || !payload?.length) return null
+                  return (
+                    <div className="bg-background border border-border p-2 text-xs space-y-2">
+                      {payload.map((entry: any, i: number) => {
+                        const obj = objectives[i]
+                        if (!obj || entry.value === null) return null
+                        return (
+                          <div key={obj.id}>
+                            <div className="flex items-center justify-between gap-4">
+                              <span className="font-medium">{obj.title}</span>
+                              <span className="text-muted-foreground font-mono">{Math.round(entry.value)}%</span>
+                            </div>
+                            {obj.key_results.length > 0 && (
+                              <div className="mt-1 space-y-0.5 text-muted-foreground font-mono">
+                                {obj.key_results.map((kr) => (
+                                  <div key={kr.id}>{kr.current_value}/{kr.target_value}{kr.unit}</div>
+                                ))}
+                              </div>
+                            )}
+                          </div>
+                        )
+                      })}
+                    </div>
+                  )
+                }}
               />
               {objectives.map((obj, idx) => {
                 const isHovered = hoveredObj === obj.id
@@ -283,6 +392,7 @@ function DashboardCharts({ objectives, hoveredObj, setHoveredObj }: {
                     strokeWidth={isHovered ? 3 : 2}
                     strokeOpacity={isOtherHovered ? 0.2 : 1}
                     connectNulls={false}
+                    isAnimationActive={false}
                     dot={(props: any) => {
                       const opacity = isOtherHovered ? 0.2 : 1
                       const size = 8
@@ -301,8 +411,8 @@ function DashboardCharts({ objectives, hoveredObj, setHoveredObj }: {
                           </foreignObject>
                         )
                       }
-                      // Show dot at current position
-                      if (props.index === currentIdx && props.cx && props.cy) {
+                      // Show dot at today's position (current progress)
+                      if (props.index === todayIdx && props.cx && props.cy) {
                         return (
                           <circle
                             key={props.key}
@@ -683,10 +793,18 @@ function ReportModal({ objective, onClose, onDone, devMode, onDevUpdate }: {
           ...kr,
           current_value: values[kr.id] ?? kr.current_value,
         })),
-        overall_progress: Math.min(objective.key_results.reduce((acc, kr) => {
-          const newVal = values[kr.id] ?? kr.current_value
-          return acc + Math.min((newVal / kr.target_value) * 100, 100)
-        }, 0) / objective.key_results.length, 100),
+        overall_progress: (() => {
+          const pcts = objective.key_results.map(kr => {
+            const newVal = values[kr.id] ?? kr.current_value
+            if (kr.target_value === 0) return 0
+            return newVal <= kr.target_value
+              ? Math.min((newVal / kr.target_value) * 100, 100)
+              : Math.min((kr.target_value / newVal) * 100, 100)
+          })
+          pcts.sort((a, b) => a - b)
+          const m = Math.floor(pcts.length / 2)
+          return pcts.length === 0 ? 0 : pcts.length % 2 !== 0 ? pcts[m] : (pcts[m - 1] + pcts[m]) / 2
+        })(),
       }
       onDevUpdate(updatedObj)
       onDone()
@@ -867,7 +985,7 @@ export function Dashboard({ user, org, orgRole, devMode }: Props) {
                     onMouseLeave={() => setHoveredObj(null)}
                     className={`transition-opacity ${isOtherHovered ? "opacity-30" : ""}`}
                   >
-                    <div className="group flex items-center gap-3 px-4 py-3">
+                    <div className="group flex items-center gap-3 px-4 py-2">
                       <button onClick={() => toggle(obj.id)} className="text-muted-foreground hover:text-foreground">
                         <ChevronRight className={`h-4 w-4 transition-transform ${expanded.has(obj.id) ? "rotate-90" : ""}`} />
                       </button>
@@ -921,13 +1039,15 @@ export function Dashboard({ user, org, orgRole, devMode }: Props) {
                       )}
                     </div>
                     {expanded.has(obj.id) && (
-                      <div className="px-4 pb-2 pl-11">
-                        {obj.description && <p className="text-xs text-muted-foreground mb-2">{obj.description}</p>}
+                      <div className="px-4 pb-1 pl-11">
+                        {obj.description && <p className="text-xs text-muted-foreground mb-1">{obj.description}</p>}
                         <div>
                           {obj.key_results.map(kr => {
-                            const p = Math.min((kr.current_value / kr.target_value) * 100, 100)
+                            const p = kr.target_value === 0 ? 0 : kr.current_value <= kr.target_value
+                              ? Math.min((kr.current_value / kr.target_value) * 100, 100)
+                              : Math.min((kr.target_value / kr.current_value) * 100, 100)
                             return (
-                              <div key={kr.id} className="py-1 flex items-center gap-2">
+                              <div key={kr.id} className="py-0.5 flex items-center gap-2">
                                 <div className="w-8 text-[10px] font-mono text-muted-foreground text-right">{p.toFixed(0)}%</div>
                                 <div className="w-16 h-1 bg-muted flex-shrink-0"><div className="h-full bg-foreground/40" style={{ width: `${Math.min(p, 100)}%` }} /></div>
                                 <span className="flex-1 text-xs truncate">{kr.title}</span>
@@ -936,6 +1056,29 @@ export function Dashboard({ user, org, orgRole, devMode }: Props) {
                             )
                           })}
                         </div>
+                        {/* History section */}
+                        {(() => {
+                          const allUpdates = obj.key_results.flatMap(kr =>
+                            (kr.progress_updates || []).map(u => ({ ...u, krTitle: kr.title, unit: kr.unit }))
+                          ).sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime())
+                          if (allUpdates.length === 0) return null
+                          return (
+                            <div className="mt-2 pt-2 border-t border-border">
+                              <p className="text-[10px] text-muted-foreground mb-1">History</p>
+                              <div className="space-y-0.5">
+                                {allUpdates.slice(0, 5).map(u => (
+                                  <div key={u.id} className="flex items-center gap-2 text-[10px]">
+                                    <span className="text-muted-foreground w-16 flex-shrink-0">{new Date(u.created_at).toLocaleDateString("en-US", { month: "short", day: "numeric" })}</span>
+                                    <span className="truncate flex-1">{u.krTitle}</span>
+                                    <span className="text-muted-foreground">{u.previous_value} → {u.new_value} {u.unit}</span>
+                                    {u.note && <span className="text-muted-foreground truncate max-w-24" title={u.note}>"{u.note}"</span>}
+                                  </div>
+                                ))}
+                                {allUpdates.length > 5 && <p className="text-[10px] text-muted-foreground">+{allUpdates.length - 5} more</p>}
+                              </div>
+                            </div>
+                          )
+                        })()}
                       </div>
                     )}
                   </div>
