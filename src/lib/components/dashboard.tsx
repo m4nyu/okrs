@@ -6,13 +6,35 @@ import { createClient } from "@/lib/supabase/client"
 import type { User } from "@supabase/supabase-js"
 import type { Objective, KeyResult, ObjectiveWithProgress, Organization, OrgMember, OrgInvite } from "@/lib/types"
 import useSWR from "swr"
-import { Sun, Moon, Monitor, Target, ChevronRight, Plus, Trash2, Sparkles, Loader2, X, Users, Building2, MoreVertical } from "lucide-react"
+import { Sun, Moon, Monitor, Target, ChevronRight, Plus, Trash2, Sparkles, Loader2, X, Users, Building2, MoreVertical, Circle, Square, Triangle, Diamond, Hexagon } from "lucide-react"
 import { Drawer, DrawerContent, DrawerHeader, DrawerTitle } from "@/lib/components/ui/drawer"
 import { useIsMobile } from "@/lib/hooks/use-mobile"
 import { ChartContainer, ChartTooltip, ChartTooltipContent } from "@/lib/components/ui/chart"
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, ResponsiveContainer } from "recharts"
 import { OrgSettings } from "@/lib/components/org-settings"
 import { ScrollArea } from "@/lib/components/ui/scroll-area"
+
+// Colors for OKR lines
+const CHART_COLORS = [
+  "var(--chart-1)",
+  "var(--chart-2)",
+  "var(--chart-3)",
+  "var(--chart-4)",
+  "var(--chart-5)",
+]
+
+// Tailwind fill classes for icons (must match CHART_COLORS order)
+const CHART_FILL_CLASSES = [
+  "fill-chart-1",
+  "fill-chart-2",
+  "fill-chart-3",
+  "fill-chart-4",
+  "fill-chart-5",
+]
+
+// Icons for OKRs - clean geometric shapes, assigned by index (max 5 objectives)
+const OKR_ICONS = [Circle, Square, Diamond, Triangle, Hexagon] as const
+const MAX_OBJECTIVES = 5
 
 interface Props {
   user: User
@@ -118,52 +140,70 @@ function DashboardCharts({ objectives, hoveredObj, setHoveredObj }: {
     const minDate = new Date(Math.min(...allDates.map(d => d.getTime())))
     const maxDate = new Date(Math.max(...allDates.map(d => d.getTime()), now.getTime()))
     
-    // Generate timeline points (weekly intervals)
-    const points: Date[] = []
+    // Generate timeline points (weekly intervals + objective start dates + today)
+    const pointsSet = new Set<number>()
+
+    // Add weekly intervals
     const current = new Date(minDate)
+    current.setHours(0, 0, 0, 0)
     while (current <= maxDate) {
-      points.push(new Date(current))
+      pointsSet.add(current.getTime())
       current.setDate(current.getDate() + 7)
     }
-    if (points.length === 0) points.push(now)
-    if (points[points.length - 1] < maxDate) points.push(maxDate)
+
+    // Add each objective's creation date (normalized to start of day)
+    objectives.forEach(obj => {
+      const created = new Date(obj.created_at)
+      created.setHours(0, 0, 0, 0)
+      pointsSet.add(created.getTime())
+    })
+
+    // Add today (normalized to start of day)
+    const today = new Date(now)
+    today.setHours(0, 0, 0, 0)
+    pointsSet.add(today.getTime())
+
+    // Sort and convert back to dates
+    const points = Array.from(pointsSet).sort((a, b) => a - b).map(ts => new Date(ts))
     
     // Build data for each point
     return points.map(date => {
-      const entry: Record<string, number | string> = { 
-        date: date.toLocaleDateString("en-US", { month: "short", day: "numeric" }) 
+      const entry: Record<string, number | string | number> = {
+        date: date.toLocaleDateString("en-US", { month: "short", day: "numeric" }),
+        _timestamp: date.getTime()
       }
       
       objectives.forEach((obj, idx) => {
         const objCreated = new Date(obj.created_at)
         const objEnd = obj.end_date ? new Date(obj.end_date) : maxDate
-        
-        if (date < objCreated) {
-          // Before objective started
-          entry[`obj${idx}`] = 100
-        } else if (date >= objEnd) {
-          // After or at end date - show actual remaining
-          entry[`obj${idx}`] = Math.max(0, 100 - obj.overall_progress)
+
+        // Compare dates only (ignore time of day)
+        const dateOnly = new Date(date.getFullYear(), date.getMonth(), date.getDate())
+        const objCreatedOnly = new Date(objCreated.getFullYear(), objCreated.getMonth(), objCreated.getDate())
+
+        if (dateOnly < objCreatedOnly) {
+          // Before objective started - don't show line
+          entry[`obj${idx}`] = null as any
+        } else if (dateOnly.getTime() === objCreatedOnly.getTime()) {
+          // At start date - begin at 0%
+          entry[`obj${idx}`] = 0
+        } else if (date >= objEnd || date >= now) {
+          // After end date or at/after today - show actual progress
+          entry[`obj${idx}`] = Math.min(obj.overall_progress, 100)
         } else {
           // During objective timeline - calculate progress at this point
-          // Look at progress updates to find historical value
           let progressAtDate = 0
           obj.key_results.forEach(kr => {
             const updates = (kr as any).progress_updates || []
-            // Find most recent update before or at this date
             const relevantUpdates = updates.filter((u: any) => new Date(u.created_at) <= date)
             if (relevantUpdates.length > 0) {
-              const latestUpdate = relevantUpdates.sort((a: any, b: any) => 
+              const latestUpdate = relevantUpdates.sort((a: any, b: any) =>
                 new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
               )[0]
               progressAtDate += (latestUpdate.new_value / kr.target_value) * 100
-            } else if (date >= now) {
-              // For future dates after now, use current value
-              progressAtDate += (kr.current_value / kr.target_value) * 100
             }
           })
-          const avgProgress = obj.key_results.length > 0 ? Math.min(progressAtDate / obj.key_results.length, 100) : 0
-          entry[`obj${idx}`] = Math.max(0, 100 - (date <= now ? avgProgress : Math.min(obj.overall_progress, 100)))
+          entry[`obj${idx}`] = obj.key_results.length > 0 ? Math.min(progressAtDate / obj.key_results.length, 100) : 0
         }
       })
       
@@ -174,13 +214,7 @@ function DashboardCharts({ objectives, hoveredObj, setHoveredObj }: {
   const burndownData = generateBurndownData()
   
   // Colors for different objectives
-  const colors = [
-    "hsl(var(--chart-1))",
-    "hsl(var(--chart-2))",
-    "hsl(var(--chart-3))",
-    "hsl(var(--chart-4))",
-    "hsl(var(--chart-5))",
-  ]
+  const colors = CHART_COLORS
 
   // Build chart config dynamically
   const chartConfig: Record<string, { label: string; color?: string }> = {
@@ -194,11 +228,11 @@ function DashboardCharts({ objectives, hoveredObj, setHoveredObj }: {
   })
 
   // Find current position index in data (closest to today)
-  const now = new Date()
+  const nowTs = Date.now()
   const currentIdx = burndownData.findIndex((d, i) => {
     if (i === burndownData.length - 1) return true
-    const nextDate = new Date(burndownData[i + 1]?.date || now)
-    return nextDate > now
+    const nextTs = (burndownData[i + 1] as any)?._timestamp || nowTs
+    return nextTs > nowTs
   })
 
   return (
@@ -210,24 +244,25 @@ function DashboardCharts({ objectives, hoveredObj, setHoveredObj }: {
             <span className="text-sm font-medium">Status</span>
           </div>
           <ChartContainer config={chartConfig} className="h-64 w-full">
-            <LineChart data={burndownData} margin={{ top: 10, right: 40, left: 0, bottom: 0 }}>
+            <LineChart data={burndownData} margin={{ top: 10, right: 10, left: 0, bottom: 0 }}>
               <CartesianGrid strokeDasharray="3 3" className="stroke-border" />
-              <XAxis 
-                dataKey="date" 
-                tick={{ fontSize: 10 }} 
+              <XAxis
+                dataKey="date"
+                tick={{ fontSize: 10 }}
                 tickLine={false}
                 axisLine={false}
                 className="text-muted-foreground"
               />
-              <YAxis 
-                domain={[0, 100]} 
-                tick={{ fontSize: 10 }} 
+              <YAxis
+                domain={[0, 100]}
+                tick={{ fontSize: 10 }}
                 tickLine={false}
                 axisLine={false}
                 tickFormatter={(value) => `${value}%`}
                 className="text-muted-foreground"
-                orientation="right"
+                orientation="left"
                 width={40}
+                reversed
               />
               <ChartTooltip 
                 content={<ChartTooltipContent hideLabel />}
@@ -235,30 +270,53 @@ function DashboardCharts({ objectives, hoveredObj, setHoveredObj }: {
               {objectives.map((obj, idx) => {
                 const isHovered = hoveredObj === obj.id
                 const isOtherHovered = hoveredObj !== null && hoveredObj !== obj.id
+                const IconComponent = OKR_ICONS[idx % OKR_ICONS.length]
+                const color = colors[idx % colors.length]
+                // Find first non-null data point index for this objective
+                const startIdx = burndownData.findIndex(d => (d as any)[`obj${idx}`] !== null && (d as any)[`obj${idx}`] !== undefined)
                 return (
                   <Line
                     key={obj.id}
                     type="monotone"
                     dataKey={`obj${idx}`}
-                    stroke={colors[idx % colors.length]}
+                    stroke={color}
                     strokeWidth={isHovered ? 3 : 2}
                     strokeOpacity={isOtherHovered ? 0.2 : 1}
+                    connectNulls={false}
                     dot={(props: any) => {
-                      if (props.index === currentIdx) {
+                      const opacity = isOtherHovered ? 0.2 : 1
+                      const size = 8
+                      // Show icon at start point
+                      if (props.index === startIdx && props.cx && props.cy) {
+                        return (
+                          <foreignObject
+                            key={props.key}
+                            x={props.cx - size / 2}
+                            y={props.cy - size / 2}
+                            width={size}
+                            height={size}
+                            opacity={opacity}
+                          >
+                            <IconComponent strokeWidth={0} className={`w-2 h-2 ${CHART_FILL_CLASSES[idx % CHART_FILL_CLASSES.length]}`} />
+                          </foreignObject>
+                        )
+                      }
+                      // Show dot at current position
+                      if (props.index === currentIdx && props.cx && props.cy) {
                         return (
                           <circle
                             key={props.key}
                             cx={props.cx}
                             cy={props.cy}
-                            r={isHovered ? 6 : 4}
-                            fill={colors[idx % colors.length]}
-                            opacity={isOtherHovered ? 0.2 : 1}
+                            r={size / 2}
+                            fill={color}
+                            opacity={opacity}
                           />
                         )
                       }
                       return <circle key={props.key} r={0} />
                     }}
-                    activeDot={{ r: 6 }}
+                    activeDot={{ r: 4, fill: color, stroke: color }}
                     name={obj.title.length > 20 ? obj.title.slice(0, 20) + "..." : obj.title}
                     onMouseEnter={() => setHoveredObj(obj.id)}
                     onMouseLeave={() => setHoveredObj(null)}
@@ -719,10 +777,12 @@ export function Dashboard({ user, org, orgRole, devMode }: Props) {
     }
   }, [orgSettingsOpen, org, devMode])
 
+  const canAddObjective = objectives.length < MAX_OBJECTIVES
+
   const onKey = useCallback((e: KeyboardEvent) => {
-    if ((e.metaKey || e.ctrlKey) && e.key === "n") { e.preventDefault(); setModal(true) }
+    if ((e.metaKey || e.ctrlKey) && e.key === "n") { e.preventDefault(); if (canAddObjective) setModal(true) }
     if (e.key === "Escape") { setModal(false); setReportObj(null); setEditObj(null); setMenuOpen(null); setOrgSettingsOpen(false) }
-  }, [])
+  }, [canAddObjective])
 
   useEffect(() => {
     window.addEventListener("keydown", onKey)
@@ -754,7 +814,7 @@ export function Dashboard({ user, org, orgRole, devMode }: Props) {
     <div className="h-screen flex flex-col bg-background text-foreground overflow-hidden">
       {/* Desktop header */}
       <header className="hidden md:block border-b border-border flex-shrink-0 select-none">
-        <div className="mx-auto flex h-12 max-w-3xl items-center justify-between px-6 text-sm">
+        <div className="mx-auto flex h-12 max-w-3xl lg:max-w-5xl xl:max-w-6xl items-center justify-between px-6 text-sm">
           <span className="flex items-center gap-2 font-medium"><Target className="h-4 w-4" />OKR</span>
           <div className="flex items-center gap-4 text-xs text-muted-foreground">
             <button onClick={() => setOrgSettingsOpen(true)} className="flex items-center gap-1.5 hover:text-foreground">
@@ -772,19 +832,24 @@ export function Dashboard({ user, org, orgRole, devMode }: Props) {
 
       <main className="flex-1 flex flex-col overflow-hidden pb-14 md:pb-0">
         {/* Charts - fixed */}
-        <div className="mx-auto w-full max-w-3xl px-6 pt-8 flex-shrink-0">
+        <div className="mx-auto w-full max-w-3xl lg:max-w-5xl xl:max-w-6xl px-6 pt-8 flex-shrink-0">
           <DashboardCharts objectives={objectives} hoveredObj={hoveredObj} setHoveredObj={setHoveredObj} />
 
           <div className="flex items-center justify-between mb-4 select-none">
             <h2 className="text-sm font-medium">Objectives</h2>
-            <button onClick={() => setModal(true)} className="flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground">
+            <button
+              onClick={() => canAddObjective && setModal(true)}
+              disabled={!canAddObjective}
+              className={`flex items-center gap-1.5 text-xs ${canAddObjective ? "text-muted-foreground hover:text-foreground" : "text-muted-foreground/50 cursor-not-allowed"}`}
+              title={!canAddObjective ? `Maximum ${MAX_OBJECTIVES} objectives reached` : undefined}
+            >
               <Plus className="h-3.5 w-3.5" /> New <kbd className="ml-1 px-1.5 py-0.5 bg-muted font-mono text-[10px]">{"⌘N"}</kbd>
             </button>
           </div>
         </div>
 
         {/* Objectives - scrollable */}
-        <div className="flex-1 overflow-y-auto mx-auto w-full max-w-3xl px-6 pb-6">
+        <div className="flex-1 overflow-y-auto mx-auto w-full max-w-3xl lg:max-w-5xl xl:max-w-6xl px-6 pb-6">
           {objectives.length === 0 ? (
             <div className="h-full flex items-center justify-center">
               <p className="text-sm text-muted-foreground">No objectives yet</p>
@@ -831,6 +896,10 @@ export function Dashboard({ user, org, orgRole, devMode }: Props) {
                       <button onClick={() => toggle(obj.id)} className="text-muted-foreground hover:text-foreground">
                         <ChevronRight className={`h-4 w-4 transition-transform ${expanded.has(obj.id) ? "rotate-90" : ""}`} />
                       </button>
+                      {(() => {
+                        const IconComponent = OKR_ICONS[i % OKR_ICONS.length]
+                        return <IconComponent strokeWidth={0} className={`h-2.5 w-2.5 flex-shrink-0 ${CHART_FILL_CLASSES[i % CHART_FILL_CLASSES.length]}`} />
+                      })()}
                       <div className="flex-1 min-w-0"><span className="text-sm">{obj.title}</span></div>
                       <div className="w-10 text-xs font-mono text-muted-foreground text-right">{obj.overall_progress.toFixed(0)}%</div>
                       <div className="w-16 h-6 flex-shrink-0">
