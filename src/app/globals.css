@@ -181,4 +181,23 @@
   [data-tooltip]:hover::after {
     opacity: 1;
   }
+  /* Custom scrollbar */
+  .styled-scrollbar::-webkit-scrollbar {
+    width: 6px;
+  }
+  .styled-scrollbar::-webkit-scrollbar-track {
+    background: transparent;
+  }
+  .styled-scrollbar::-webkit-scrollbar-thumb {
+    background: var(--border);
+    border-radius: 3px;
+  }
+  .styled-scrollbar::-webkit-scrollbar-thumb:hover {
+    background: var(--muted-foreground);
+  }
+  /* Firefox */
+  .styled-scrollbar {
+    scrollbar-width: thin;
+    scrollbar-color: var(--border) transparent;
+  }
 }
