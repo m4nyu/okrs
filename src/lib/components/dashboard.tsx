@@ -5,13 +5,14 @@ import { createClient } from "@/lib/supabase/client"
 import type { User } from "@supabase/supabase-js"
 import type { Objective, KeyResult, ObjectiveWithProgress, Organization, OrgMember, OrgInvite } from "@/lib/types"
 import useSWR from "swr"
-import { Sun, Moon, Monitor, Target, ChevronRight, Plus, Trash2, Sparkles, Loader2, X, Users, Building2, MoreVertical, Circle, Square, Triangle, Diamond, Hexagon } from "lucide-react"
+import { Sun, Moon, Monitor, Target, ChevronRight, Plus, Trash2, Sparkles, Loader2, X, Building2, MoreVertical, Circle, Square, Triangle, Diamond, Hexagon, History, ArrowUpDown, ChevronDown } from "lucide-react"
 import { useAppStore } from "@/lib/store"
 import { Drawer, DrawerContent, DrawerHeader, DrawerTitle } from "@/lib/components/ui/drawer"
 import { useIsMobile } from "@/lib/hooks/use-mobile"
 import { ChartContainer, ChartTooltip } from "@/lib/components/ui/chart"
 import { LineChart, Line, XAxis, YAxis, CartesianGrid } from "recharts"
 import { OrgSettings } from "@/lib/components/org-settings"
+import { OrgSwitcher } from "@/lib/components/org-switcher"
 import { ScrollArea } from "@/lib/components/ui/scroll-area"
 
 // Colors for OKR lines
@@ -36,11 +37,17 @@ const CHART_FILL_CLASSES = [
 const OKR_ICONS = [Circle, Square, Diamond, Triangle, Hexagon] as const
 const MAX_OBJECTIVES = 5
 
+interface OrgWithRole extends Organization {
+  role?: string
+}
+
 interface Props {
   user: User
   org: Organization
   orgRole: "owner" | "admin" | "member"
   devMode?: boolean
+  needsOrgName?: boolean
+  userOrgs?: OrgWithRole[]
 }
 
 async function fetchData() {
@@ -73,7 +80,7 @@ async function fetchData() {
 }
 
 // Theme button component
-function ThemeBtn({ user, supabase, org, onOrgClick }: { user: User; supabase: ReturnType<typeof createClient>; org: Organization; onOrgClick: () => void }) {
+function ThemeBtn({ mobileOrg, mobileUserOrgs, mobileOpenOrgSettings, mobileSignOut, mobileUserEmail }: { mobileOrg?: Organization; mobileUserOrgs?: (Organization & { role?: string })[]; mobileOpenOrgSettings?: () => void; mobileSignOut?: () => void; mobileUserEmail?: string }) {
   const { theme, setTheme } = useAppStore()
   const [open, setOpen] = useState(false)
 
@@ -95,24 +102,41 @@ function ThemeBtn({ user, supabase, org, onOrgClick }: { user: User; supabase: R
   const Icon = theme === "light" ? Sun : theme === "dark" ? Moon : Monitor
   return (
     <>
+      {/* Mobile top bar - OKR left, theme right */}
+      <div className="md:hidden fixed top-3 left-3 z-40 select-none flex items-center gap-2">
+        <Target className="h-4 w-4" />
+        <span className="text-sm font-medium">OKR</span>
+      </div>
+      <div className="md:hidden fixed top-3 right-3 z-40 select-none">
+        <div className="relative">
+          <button onClick={() => setOpen(!open)} className="w-7 h-7 flex items-center justify-center border border-border bg-background text-muted-foreground hover:text-foreground"><Icon className="h-3.5 w-3.5" /></button>
+          {open && (
+            <div className="absolute top-full right-0 mt-1 border border-border bg-background p-1 flex flex-col min-w-[100px]">
+              {(["light", "dark", "system"] as const).map(v => (
+                <button key={v} onClick={() => select(v)} className={`px-3 py-1.5 text-xs text-left hover:bg-muted ${theme === v ? "text-foreground" : "text-muted-foreground"}`}>{v}</button>
+              ))}
+            </div>
+          )}
+        </div>
+      </div>
       {/* Mobile footer */}
-      <nav className="md:hidden fixed bottom-0 left-0 right-0 border-t border-border bg-background z-40 flex items-center justify-between px-4 h-14 select-none">
-        <span className="flex items-center gap-2 text-sm font-medium"><Target className="h-4 w-4" />OKR</span>
-        <div className="flex items-center gap-3">
-          <button onClick={onOrgClick} className="text-muted-foreground hover:text-foreground" title={org.name}>
-            <Users className="h-4 w-4" />
-          </button>
-          <div className="relative">
-            <button onClick={() => setOpen(!open)} className="text-muted-foreground hover:text-foreground"><Icon className="h-4 w-4" /></button>
-            {open && (
-              <div className="absolute bottom-full right-0 mb-2 border border-border bg-background p-1 flex flex-col min-w-[100px]">
-                {(["light", "dark", "system"] as const).map(v => (
-                  <button key={v} onClick={() => select(v)} className={`px-3 py-1.5 text-xs text-left hover:bg-muted ${theme === v ? "text-foreground" : "text-muted-foreground"}`}>{v}</button>
-                ))}
-              </div>
-            )}
-          </div>
-          <button onClick={() => { supabase.auth.signOut(); window.location.reload() }} className="text-xs text-muted-foreground hover:text-foreground">sign out</button>
+      <nav className="md:hidden fixed bottom-0 left-0 right-0 border-t border-border bg-background z-40 flex items-center justify-between px-4 h-12 select-none">
+        {mobileOrg && mobileUserOrgs && (
+          <OrgSwitcher
+            currentOrg={mobileOrg}
+            orgs={mobileUserOrgs}
+            onCreateOrg={() => {
+              window.location.href = "/?new=1"
+            }}
+            onEditOrg={() => {
+              mobileOpenOrgSettings?.()
+            }}
+            openUp
+          />
+        )}
+        <div className="flex items-center gap-3 text-xs text-muted-foreground">
+          {mobileUserEmail && <span className="max-w-[100px] truncate">{mobileUserEmail}</span>}
+          <button onClick={() => { mobileSignOut?.() }} className="hover:text-foreground">sign out</button>
         </div>
       </nav>
       {/* Desktop theme + help buttons */}
@@ -772,14 +796,15 @@ function ObjectiveModal({ onClose, onDone, devMode, onDevCreate, editingObjectiv
 
 // Key Result Modal
 // Report Progress Modal
-function ReportModal({ objective, onClose, onDone, devMode, onDevUpdate }: { 
-  objective: Objective; 
-  onClose: () => void; 
+function ReportModal({ objective, onClose, onDone, devMode, onDevUpdate }: {
+  objective: Objective;
+  onClose: () => void;
   onDone: () => void;
   devMode?: boolean;
   onDevUpdate?: (obj: Objective) => void;
 }) {
   const [loading, setLoading] = useState(false)
+  const [error, setError] = useState<string | null>(null)
   const [values, setValues] = useState<Record<string, number>>(
     Object.fromEntries(objective.key_results.map(kr => [kr.id, kr.current_value]))
   )
@@ -788,7 +813,8 @@ function ReportModal({ objective, onClose, onDone, devMode, onDevUpdate }: {
   async function submit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault()
     setLoading(true)
-    
+    setError(null)
+
     if (devMode && onDevUpdate) {
       // Dev mode: update local state
       const updatedObj: Objective = {
@@ -814,15 +840,34 @@ function ReportModal({ objective, onClose, onDone, devMode, onDevUpdate }: {
       onDone()
       return
     }
-    
-    const { updateKeyResultProgress } = await import("@/lib/actions")
-    for (const kr of objective.key_results) {
-      const newValue = values[kr.id]
-      if (newValue !== kr.current_value) {
-        await updateKeyResultProgress(kr.id, newValue, note || undefined)
+
+    try {
+      const { updateKeyResultProgress } = await import("@/lib/actions")
+      let updatedCount = 0
+      for (const kr of objective.key_results) {
+        const newValue = values[kr.id]
+        console.log(`KR "${kr.title}": current=${kr.current_value}, new=${newValue}, changed=${newValue !== kr.current_value}`)
+        if (newValue !== kr.current_value) {
+          updatedCount++
+          const result = await updateKeyResultProgress(kr.id, newValue, note || undefined)
+          if (result.error) {
+            setError(result.error)
+            setLoading(false)
+            return
+          }
+        }
       }
+      console.log(`Updated ${updatedCount} key results`)
+      if (updatedCount === 0) {
+        setError("No values were changed. Update at least one value to save progress.")
+        setLoading(false)
+        return
+      }
+      onDone()
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to update progress")
+      setLoading(false)
     }
-    onDone()
   }
 
   return (
@@ -837,6 +882,11 @@ function ReportModal({ objective, onClose, onDone, devMode, onDevUpdate }: {
         </div>
         <p className="text-sm mb-4">{objective.title}</p>
         <form onSubmit={submit} className="space-y-4">
+          {error && (
+            <div className="p-2 text-xs text-red-500 bg-red-500/10 border border-red-500/20 rounded">
+              {error}
+            </div>
+          )}
           <div className="space-y-3">
             {objective.key_results.map(kr => (
               <div key={kr.id} className="flex items-center gap-3">
@@ -844,11 +894,11 @@ function ReportModal({ objective, onClose, onDone, devMode, onDevUpdate }: {
                   <p className="text-xs truncate">{kr.title}</p>
                   <p className="text-[10px] text-muted-foreground">Target: {kr.target_value} {kr.unit}</p>
                 </div>
-                <input 
-                  type="number" 
-                  value={values[kr.id] ?? kr.current_value} 
-                  onChange={e => setValues(prev => ({ ...prev, [kr.id]: Number(e.target.value) }))} 
-                  className="w-20 h-8 border border-border bg-transparent px-2 text-sm text-right rounded-md" 
+                <input
+                  type="number"
+                  value={values[kr.id] ?? kr.current_value}
+                  onChange={e => setValues(prev => ({ ...prev, [kr.id]: Number(e.target.value) }))}
+                  className="w-20 h-8 border border-border bg-transparent px-2 text-sm text-right rounded-md"
                 />
                 <span className="text-xs text-muted-foreground w-12">{kr.unit}</span>
               </div>
@@ -914,6 +964,7 @@ function HelpModal({ onClose }: { onClose: () => void }) {
             <div className="space-y-1">
               <div className="flex justify-between"><span>Expand/Collapse</span><kbd className="px-1.5 py-0.5 bg-muted font-mono">Enter</kbd> / <kbd className="px-1.5 py-0.5 bg-muted font-mono">X</kbd></div>
               <div className="flex justify-between"><span>Report progress</span><kbd className="px-1.5 py-0.5 bg-muted font-mono">R</kbd></div>
+              <div className="flex justify-between"><span>View history</span><kbd className="px-1.5 py-0.5 bg-muted font-mono">H</kbd></div>
               <div className="flex justify-between"><span>Edit</span><kbd className="px-1.5 py-0.5 bg-muted font-mono">E</kbd></div>
               <div className="flex justify-between"><span>Delete</span><kbd className="px-1.5 py-0.5 bg-muted font-mono">D</kbd></div>
               <div className="flex justify-between"><span>Open settings</span><kbd className="px-1.5 py-0.5 bg-muted font-mono">O</kbd></div>
@@ -925,11 +976,169 @@ function HelpModal({ onClose }: { onClose: () => void }) {
   )
 }
 
-export function Dashboard({ user, org, orgRole, devMode }: Props) {
+// History Modal - shows all progress updates for an objective
+function HistoryModal({ objective, onClose }: { objective: Objective; onClose: () => void }) {
+  const isMobile = useIsMobile()
+  const [filterKr, setFilterKr] = useState<string>("all")
+  const [sortNewest, setSortNewest] = useState(true)
+  const [filterOpen, setFilterOpen] = useState(false)
+
+  // Flatten all progress updates with KR info
+  const allUpdates = objective.key_results.flatMap(kr =>
+    (kr.progress_updates || []).map(u => ({
+      ...u,
+      krId: kr.id,
+      krTitle: kr.title,
+      unit: kr.unit,
+    }))
+  )
+
+  // Apply filter
+  const filteredUpdates = filterKr === "all"
+    ? allUpdates
+    : allUpdates.filter(u => u.krId === filterKr)
+
+  // Apply sort
+  const sortedUpdates = [...filteredUpdates].sort((a, b) => {
+    const diff = new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
+    return sortNewest ? diff : -diff
+  })
+
+  const content = (
+    <div className="flex flex-col h-full">
+      {/* Header */}
+      <div className="flex justify-between items-start mb-2 select-none flex-shrink-0">
+        <div>
+          <span className="font-medium text-sm">Progress History</span>
+          <p className="text-xs text-muted-foreground mt-0.5 pr-4">{objective.title}</p>
+        </div>
+        {!isMobile && (
+          <button onClick={onClose} className="flex items-center gap-1.5 text-muted-foreground hover:text-foreground flex-shrink-0">
+            <X className="h-3.5 w-3.5" />
+            <kbd className="px-1 py-0.5 bg-muted font-mono text-[10px]">Esc</kbd>
+          </button>
+        )}
+      </div>
+
+      {/* Filters */}
+      <div className="flex items-center gap-2 mb-3 flex-shrink-0">
+        {/* KR Filter dropdown */}
+        <div className="relative flex-1">
+          <button
+            onClick={() => setFilterOpen(!filterOpen)}
+            className="w-full h-8 px-2 text-xs border border-border bg-transparent flex items-center justify-between hover:border-foreground/50"
+          >
+            <span className="truncate">
+              {filterKr === "all" ? "All Key Results" : objective.key_results.find(kr => kr.id === filterKr)?.title || "All"}
+            </span>
+            <ChevronDown className={`h-3.5 w-3.5 flex-shrink-0 ml-1 transition-transform ${filterOpen ? "rotate-180" : ""}`} />
+          </button>
+          {filterOpen && (
+            <>
+              <div className="fixed inset-0 z-40" onClick={() => setFilterOpen(false)} />
+              <div className="absolute left-0 top-full mt-1 z-50 w-full bg-popover border border-border shadow-md py-1 max-h-48 overflow-y-auto">
+                <button
+                  onClick={() => { setFilterKr("all"); setFilterOpen(false) }}
+                  className={`w-full px-2 py-1.5 text-left text-xs hover:bg-muted/50 ${filterKr === "all" ? "bg-muted/30" : ""}`}
+                >
+                  All Key Results
+                </button>
+                {objective.key_results.map(kr => (
+                  <button
+                    key={kr.id}
+                    onClick={() => { setFilterKr(kr.id); setFilterOpen(false) }}
+                    className={`w-full px-2 py-1.5 text-left text-xs hover:bg-muted/50 truncate ${filterKr === kr.id ? "bg-muted/30" : ""}`}
+                  >
+                    {kr.title}
+                  </button>
+                ))}
+              </div>
+            </>
+          )}
+        </div>
+
+        {/* Sort toggle */}
+        <button
+          onClick={() => setSortNewest(!sortNewest)}
+          className="h-8 px-2 text-xs border border-border bg-transparent flex items-center gap-1.5 hover:border-foreground/50 flex-shrink-0"
+        >
+          <ArrowUpDown className="h-3.5 w-3.5" />
+          {sortNewest ? "Newest" : "Oldest"}
+        </button>
+      </div>
+
+      {/* History list */}
+      <ScrollArea className="flex-1 min-h-0">
+        {sortedUpdates.length === 0 ? (
+          <div className="text-center py-8 text-sm text-muted-foreground">
+            No progress updates yet
+          </div>
+        ) : (
+          <div className="space-y-2 pr-3">
+            {sortedUpdates.map(u => {
+              const delta = u.new_value - u.previous_value
+              const deltaColor = delta > 0 ? "text-green-500" : delta < 0 ? "text-red-500" : "text-muted-foreground"
+              const deltaText = delta > 0 ? `+${delta}` : delta.toString()
+
+              return (
+                <div key={u.id} className="border border-border p-2.5 rounded-sm">
+                  <div className="flex items-center justify-between mb-1">
+                    <span className="text-[10px] text-muted-foreground">
+                      {new Date(u.created_at).toLocaleDateString("en-US", { month: "short", day: "numeric" })},{" "}
+                      {new Date(u.created_at).toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" })}
+                    </span>
+                    <span className={`text-xs font-mono ${deltaColor}`}>{deltaText}</span>
+                  </div>
+                  <p className="text-xs mb-1 truncate" title={u.krTitle}>{u.krTitle}</p>
+                  <p className="text-xs text-muted-foreground font-mono">
+                    {u.previous_value} → {u.new_value} {u.unit}
+                  </p>
+                  {u.note && (
+                    <p className="text-xs text-muted-foreground mt-1.5 italic">"{u.note}"</p>
+                  )}
+                </div>
+              )
+            })}
+          </div>
+        )}
+      </ScrollArea>
+    </div>
+  )
+
+  // Mobile: Drawer
+  if (isMobile) {
+    return (
+      <Drawer open onOpenChange={open => !open && onClose()}>
+        <DrawerContent className="!mt-0 h-[85dvh] !max-h-[85dvh] flex flex-col rounded-t-lg">
+          <DrawerHeader className="pb-2 select-none flex-shrink-0 pt-2">
+            <DrawerTitle className="text-sm font-medium sr-only">Progress History</DrawerTitle>
+          </DrawerHeader>
+          <div className="px-4 pb-4 flex-1 min-h-0 flex flex-col">
+            {content}
+          </div>
+        </DrawerContent>
+      </Drawer>
+    )
+  }
+
+  // Desktop: Centered dialog
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4" onClick={onClose}>
+      <div
+        className="w-full max-w-md max-h-[70vh] flex flex-col border border-border bg-background p-5"
+        onClick={e => e.stopPropagation()}
+      >
+        {content}
+      </div>
+    </div>
+  )
+}
+
+export function Dashboard({ user, org, orgRole, devMode, needsOrgName, userOrgs = [] }: Props) {
   // Zustand store
   const {
-    showObjectiveModal, showReportModal, showOrgSettings, showHelp,
-    editingObjective, reportingObjective,
+    showObjectiveModal, showReportModal, showOrgSettings, showHelp, showHistoryModal,
+    editingObjective, reportingObjective, historyObjective,
     selectedIdx, hoveredObjId, expandedIds, menuOpenId,
     objectives: storeObjectives, orgMembers, orgInvites,
     setObjectives, setOrgMembers, setOrgInvites,
@@ -937,6 +1146,7 @@ export function Dashboard({ user, org, orgRole, devMode }: Props) {
     openReportModal, closeReportModal,
     openOrgSettings, closeOrgSettings,
     openHelp, closeHelp, closeAllModals,
+    openHistoryModal, closeHistoryModal,
     setSelectedIdx, setHoveredObjId, toggleExpanded, setMenuOpenId,
     selectNext, selectPrev, selectByNumber,
     setChartPeriod, cycleTheme,
@@ -946,6 +1156,7 @@ export function Dashboard({ user, org, orgRole, devMode }: Props) {
   const { data: dbObjectives = [], mutate } = useSWR(devMode ? null : "objectives", fetchData)
   const supabase = createClient()
   const isAdmin = orgRole === "owner" || orgRole === "admin"
+
 
   // Sync fetched objectives to store
   useEffect(() => {
@@ -993,6 +1204,7 @@ export function Dashboard({ user, org, orgRole, devMode }: Props) {
     // Global shortcuts (work even in inputs)
     if (e.key === "Escape") {
       e.preventDefault()
+      if (showHistoryModal) { closeHistoryModal(); return }
       if (showHelp) { closeHelp(); return }
       if (menuOpenId) { setMenuOpenId(null); return }
       if (showObjectiveModal) { closeObjectiveModal(); return }
@@ -1011,7 +1223,7 @@ export function Dashboard({ user, org, orgRole, devMode }: Props) {
     }
 
     // Skip rest if in input or modal open
-    if (isInput || showObjectiveModal || showReportModal || showOrgSettings || showHelp) return
+    if (isInput || showObjectiveModal || showReportModal || showOrgSettings || showHelp || showHistoryModal) return
 
     // Help
     if (e.key === "?" || (e.shiftKey && e.key === "/")) { e.preventDefault(); openHelp(); return }
@@ -1058,6 +1270,13 @@ export function Dashboard({ user, org, orgRole, devMode }: Props) {
         return
       }
 
+      // H - view history
+      if (e.key === "h" || e.key === "H") {
+        e.preventDefault()
+        openHistoryModal(obj)
+        return
+      }
+
       // E - edit (admin only)
       if ((e.key === "e" || e.key === "E") && isAdmin) {
         e.preventDefault()
@@ -1082,9 +1301,9 @@ export function Dashboard({ user, org, orgRole, devMode }: Props) {
 
   }, [
     canAddObjective, objectives, selectedIdx, showObjectiveModal, showReportModal,
-    showOrgSettings, showHelp, menuOpenId, isAdmin, deleteObj,
-    closeHelp, setMenuOpenId, closeObjectiveModal, closeReportModal, closeOrgSettings,
-    setSelectedIdx, openObjectiveModal, openOrgSettings, cycleTheme, openHelp,
+    showOrgSettings, showHelp, showHistoryModal, menuOpenId, isAdmin, deleteObj,
+    closeHelp, closeHistoryModal, setMenuOpenId, closeObjectiveModal, closeReportModal, closeOrgSettings,
+    setSelectedIdx, openObjectiveModal, openOrgSettings, cycleTheme, openHelp, openHistoryModal,
     setChartPeriod, selectByNumber, selectNext, selectPrev, toggleExpanded, openReportModal
   ])
 
@@ -1104,11 +1323,16 @@ export function Dashboard({ user, org, orgRole, devMode }: Props) {
         <div className="mx-auto flex h-12 max-w-3xl lg:max-w-5xl xl:max-w-6xl items-center justify-between px-6 text-sm">
           <span className="flex items-center gap-2 font-medium"><Target className="h-4 w-4" />OKR</span>
           <div className="flex items-center gap-4 text-xs text-muted-foreground">
-            <button onClick={() => openOrgSettings()} className="flex items-center gap-1.5 hover:text-foreground">
-              <Building2 className="h-3.5 w-3.5" />
-              {org.name}
-              <kbd className="px-1 py-0.5 bg-muted font-mono text-[10px]">⌘,</kbd>
-            </button>
+            <OrgSwitcher
+              currentOrg={org}
+              orgs={userOrgs}
+              onCreateOrg={() => {
+                window.location.href = "/?new=1"
+              }}
+              onEditOrg={() => {
+                openOrgSettings()
+              }}
+            />
             <span>{user.email}</span>
             <button onClick={() => { supabase.auth.signOut(); window.location.reload() }} className="hover:text-foreground">sign out</button>
           </div>
@@ -1116,14 +1340,15 @@ export function Dashboard({ user, org, orgRole, devMode }: Props) {
       </header>
 
       {/* Theme button (mobile footer + desktop bottom-right) */}
-      <ThemeBtn user={user} supabase={supabase} org={org} onOrgClick={() => openOrgSettings()} />
+      <ThemeBtn mobileOrg={org} mobileUserOrgs={userOrgs} mobileOpenOrgSettings={openOrgSettings} mobileSignOut={() => { supabase.auth.signOut(); window.location.reload() }} mobileUserEmail={user.email} />
 
-      <main className="flex-1 flex flex-col overflow-hidden pb-14 md:pb-0">
+      <main className="flex-1 flex flex-col overflow-hidden pb-[104px] md:pb-0">
         {/* Charts - fixed */}
         <div className="mx-auto w-full max-w-3xl lg:max-w-5xl xl:max-w-6xl px-6 pt-8 flex-shrink-0">
           <DashboardCharts objectives={objectives} hoveredObj={hoveredObjId} setHoveredObj={setHoveredObjId} />
 
-          <div className="flex items-center justify-between mb-4 select-none">
+          {/* Desktop: Objectives header inline */}
+          <div className="hidden md:flex items-center justify-between mb-4 select-none">
             <h2 className="text-sm font-medium">Objectives</h2>
             <button
               onClick={() => canAddObjective && openObjectiveModal()}
@@ -1178,6 +1403,9 @@ export function Dashboard({ user, org, orgRole, devMode }: Props) {
                       <span data-tooltip="Overall progress" className="text-xs font-mono text-muted-foreground hover:text-foreground transition-colors leading-none">{obj.overall_progress.toFixed(0)}%</span>
                       <button onClick={() => openReportModal(obj)} className="text-xs text-muted-foreground hover:text-foreground transition-colors leading-none flex items-center gap-1">
                         report <kbd className="px-1 py-0.5 bg-muted font-mono text-[10px]">R</kbd>
+                      </button>
+                      <button onClick={() => openHistoryModal(obj)} className="text-xs text-muted-foreground hover:text-foreground transition-colors leading-none flex items-center gap-1">
+                        history <kbd className="px-1 py-0.5 bg-muted font-mono text-[10px]">H</kbd>
                       </button>
                       {isAdmin && (
                         <div className="relative opacity-0 group-hover:opacity-100 transition-opacity flex items-center">
@@ -1262,6 +1490,18 @@ export function Dashboard({ user, org, orgRole, devMode }: Props) {
         </div>
       </main>
 
+      {/* Mobile: Objectives header bar fixed at bottom above footer */}
+      <div className="md:hidden fixed bottom-16 left-0 right-0 bg-background z-30 flex items-center justify-between px-4 h-10 select-none">
+        <h2 className="text-sm font-medium">Objectives</h2>
+        <button
+          onClick={() => canAddObjective && openObjectiveModal()}
+          disabled={!canAddObjective}
+          className={`flex items-center gap-1.5 text-xs ${canAddObjective ? "text-muted-foreground hover:text-foreground" : "text-muted-foreground/50 cursor-not-allowed"}`}
+        >
+          <Plus className="h-3.5 w-3.5" /> New
+        </button>
+      </div>
+
       {showObjectiveModal && <ObjectiveModal
         onClose={closeObjectiveModal}
         onDone={() => { closeObjectiveModal(); if (!devMode) mutate() }}
@@ -1302,6 +1542,33 @@ export function Dashboard({ user, org, orgRole, devMode }: Props) {
             }
             return result
           }}
+          onUpdateMemberRole={async (memberId, role) => {
+            const { updateMemberRole } = await import("@/lib/actions")
+            const result = await updateMemberRole(memberId, role)
+            if (!result.error) {
+              const { getOrgMembers } = await import("@/lib/actions")
+              setOrgMembers(await getOrgMembers(org.id))
+            }
+            return result
+          }}
+          onUpdateMemberName={async (memberId, name) => {
+            const { updateMemberName } = await import("@/lib/actions")
+            const result = await updateMemberName(memberId, name)
+            if (!result.error) {
+              const { getOrgMembers } = await import("@/lib/actions")
+              setOrgMembers(await getOrgMembers(org.id))
+            }
+            return result
+          }}
+          onTransferOwnership={async (memberId) => {
+            const { transferOwnership } = await import("@/lib/actions")
+            const result = await transferOwnership(memberId)
+            if (!result.error) {
+              const { getOrgMembers } = await import("@/lib/actions")
+              setOrgMembers(await getOrgMembers(org.id))
+            }
+            return result
+          }}
           onCancelInvite={async (inviteId) => {
             const { cancelInvite } = await import("@/lib/actions")
             const result = await cancelInvite(inviteId)
@@ -1315,9 +1582,11 @@ export function Dashboard({ user, org, orgRole, devMode }: Props) {
             const { updateOrgSettings } = await import("@/lib/actions")
             return updateOrgSettings(settings)
           }}
+          highlightOrgName={needsOrgName}
         />
       )}
       {showHelp && <HelpModal onClose={closeHelp} />}
+      {showHistoryModal && historyObjective && <HistoryModal objective={historyObjective} onClose={closeHistoryModal} />}
     </div>
   )
 }

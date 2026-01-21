@@ -3,7 +3,8 @@
   "version": "0.1.0",
   "private": true,
   "scripts": {
-    "dev": "supabase start --workdir .supabase > /dev/null && next dev",
+    "dev": "next dev",
+    "db:push": "export $(grep SUPABASE_ACCESS_TOKEN .env | xargs) && supabase db push --workdir .supabase",
     "build": "next build",
     "db:start": "supabase start --workdir .supabase -o toml",
     "db:stop": "supabase stop --workdir .supabase",

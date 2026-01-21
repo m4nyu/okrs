@@ -2,16 +2,19 @@ import { createClient } from "@/lib/supabase/server"
 import { AuthForm } from "@/lib/components/auth-form"
 import { Dashboard } from "@/lib/components/dashboard"
 import { redirect } from "next/navigation"
-import { generateAndCreateOrg } from "@/lib/actions"
 
 const DEV_MODE = process.env.NEXT_PUBLIC_DEV_MODE === "true"
 
-export default async function Home({
+export default async function OrgPage({
+  params,
   searchParams
 }: {
-  searchParams: Promise<{ new?: string }>
+  params: Promise<{ slug: string }>
+  searchParams: Promise<{ setup?: string }>
 }) {
-  const { new: createNew } = await searchParams
+  const { slug } = await params
+  const { setup } = await searchParams
+  const needsOrgName = setup === "1"
 
   if (DEV_MODE) {
     return <Dashboard
@@ -29,41 +32,42 @@ export default async function Home({
     return <AuthForm />
   }
 
-  // Check for all org memberships (multi-org support)
-  const { data: memberships } = await supabase
+  // Get the org by slug
+  const { data: org } = await supabase
+    .from("organizations")
+    .select("*")
+    .eq("slug", slug)
+    .single()
+
+  if (!org) {
+    redirect("/")
+  }
+
+  // Check if user is a member of this org
+  const { data: membership } = await supabase
+    .from("org_members")
+    .select("role")
+    .eq("org_id", org.id)
+    .eq("user_id", user.id)
+    .single()
+
+  if (!membership) {
+    redirect("/")
+  }
+
+  // Fetch all user's orgs for the org switcher
+  const { data: allMemberships } = await supabase
     .from("org_members")
     .select("org_id, role, organizations(*)")
     .eq("user_id", user.id)
     .order("joined_at", { ascending: true })
 
-  const userOrgs = memberships
+  const userOrgs = allMemberships
     ?.filter(m => m.organizations)
     .map(m => ({
       ...(m.organizations as any),
       role: m.role
     })) || []
 
-  // If has orgs and not creating new, redirect to first org URL
-  if (userOrgs.length > 0 && createNew !== "1") {
-    redirect(`/org/${userOrgs[0].slug}`)
-  }
-
-  // No org - create one and redirect
-  const result = await generateAndCreateOrg()
-
-  if (result.data?.slug) {
-    redirect(`/org/${result.data.slug}`)
-  }
-
-  // Show error if creation failed
-  return (
-    <div className="min-h-screen bg-background flex items-center justify-center p-8">
-      <div className="text-center space-y-4">
-        <p className="text-sm text-muted-foreground">
-          {result.error || "Failed to create organization"}
-        </p>
-        <a href="/" className="text-sm underline">Try again</a>
-      </div>
-    </div>
-  )
+  return <Dashboard user={user} org={org} orgRole={membership.role as "owner" | "admin" | "member"} needsOrgName={needsOrgName} userOrgs={userOrgs} />
 }
