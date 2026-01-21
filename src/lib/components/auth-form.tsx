@@ -23,33 +23,33 @@ export function AuthForm() {
           </div>
         </div>
       </div>
-      <div className="bg-black relative hidden lg:block overflow-hidden">
+      <div className="bg-background relative hidden lg:block overflow-hidden">
         <div
           className="absolute inset-0"
           style={{
-            maskImage: "radial-gradient(ellipse at center, black 0%, black 30%, transparent 70%)",
-            WebkitMaskImage: "radial-gradient(ellipse at center, black 0%, black 30%, transparent 70%)"
+            maskImage: "radial-gradient(ellipse at center, black 0%, black 20%, transparent 60%)",
+            WebkitMaskImage: "radial-gradient(ellipse at center, black 0%, black 20%, transparent 60%)"
           }}
         >
           <DottedGlowBackground
             gap={16}
-            radius={0.8}
+            radius={1.2}
             opacity={0.7}
             speedMin={0.2}
             speedMax={0.6}
             speedScale={0.7}
-            color="rgba(255,255,255,0.4)"
-            darkColor="rgba(255,255,255,0.4)"
-            glowColor="rgba(255,255,255,0.9)"
-            darkGlowColor="rgba(255,255,255,0.9)"
+            colorLightVar="--foreground"
+            colorDarkVar="--foreground"
+            glowColorLightVar="--foreground"
+            glowColorDarkVar="--foreground"
           />
         </div>
         <div className="absolute inset-0 flex flex-col items-center justify-center p-10 z-10">
           <div className="max-w-md text-center">
-            <h2 className="text-3xl font-bold tracking-tight mb-4 text-white">
+            <h2 className="text-3xl font-bold tracking-tight mb-4 text-foreground">
               Startup goals for your team
             </h2>
-            <p className="text-zinc-400">
+            <p className="text-muted-foreground">
               Set objectives, track key results, and align your team around what matters most.
             </p>
           </div>

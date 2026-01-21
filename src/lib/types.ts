@@ -79,13 +79,14 @@ export interface OrgMember {
   role: 'owner' | 'admin' | 'member'
   joined_at: string
   user_email?: string
+  user_name?: string
 }
 
 export interface OrgInvite {
   id: string
   org_id: string
   email: string
-  role: 'admin' | 'member'
+  role: 'owner' | 'admin' | 'member'
   invited_by: string
   expires_at: string
   created_at: string

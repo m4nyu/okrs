@@ -52,8 +52,10 @@ interface AppState {
   showReportModal: boolean
   showOrgSettings: boolean
   showHelp: boolean
+  showHistoryModal: boolean
   editingObjective: Objective | null
   reportingObjective: Objective | null
+  historyObjective: Objective | null
 
   // UI - Selection
   selectedIdx: number
@@ -123,6 +125,8 @@ interface AppState {
   closeOrgSettings: () => void
   openHelp: () => void
   closeHelp: () => void
+  openHistoryModal: (objective: Objective) => void
+  closeHistoryModal: () => void
   closeAllModals: () => void
 
   // Actions - Selection
@@ -220,8 +224,10 @@ export const useAppStore = create<AppState>()(
       showReportModal: false,
       showOrgSettings: false,
       showHelp: false,
+      showHistoryModal: false,
       editingObjective: null,
       reportingObjective: null,
+      historyObjective: null,
 
       // Initial State - Selection
       selectedIdx: -1,
@@ -298,13 +304,17 @@ export const useAppStore = create<AppState>()(
       closeOrgSettings: () => set({ showOrgSettings: false }),
       openHelp: () => set({ showHelp: true }),
       closeHelp: () => set({ showHelp: false }),
+      openHistoryModal: (objective) => set({ showHistoryModal: true, historyObjective: objective }),
+      closeHistoryModal: () => set({ showHistoryModal: false, historyObjective: null }),
       closeAllModals: () => set({
         showObjectiveModal: false,
         showReportModal: false,
         showOrgSettings: false,
         showHelp: false,
+        showHistoryModal: false,
         editingObjective: null,
         reportingObjective: null,
+        historyObjective: null,
         menuOpenId: null,
       }),
 
@@ -486,4 +496,5 @@ export const useModals = () => useAppStore((s) => ({
   showReportModal: s.showReportModal,
   showOrgSettings: s.showOrgSettings,
   showHelp: s.showHelp,
+  showHistoryModal: s.showHistoryModal,
 }))
