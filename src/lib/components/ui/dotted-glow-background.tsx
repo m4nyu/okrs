@@ -299,7 +299,7 @@ export const DottedGlowBackground = ({
     >
       <canvas
         ref={canvasRef}
-        style={{ display: "block", width: "100%", height: "100%" }}
+        className="block"
       />
     </div>
   );
