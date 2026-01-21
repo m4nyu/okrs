@@ -490,6 +490,7 @@ function ObjectiveModal({ onClose, onDone, devMode, onDevCreate, editingObjectiv
     })) || []
   )
   const [evaluation, setEvaluation] = useState<string | null>(null)
+  const [validationHints, setValidationHints] = useState<{ field: "title" | "description"; issue: string; hint: string }[]>([])
 
   const date = new Date()
   date.setMonth(date.getMonth() + 3)
@@ -515,7 +516,29 @@ function ObjectiveModal({ onClose, onDone, devMode, onDevCreate, editingObjectiv
   async function generateWithAI() {
     if (!title.trim()) return
     setGenerating(true)
+    setValidationHints([])
     try {
+      // First validate the objective
+      const validateRes = await fetch("/api/ai", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: "validateObjective", data: { title, description } }),
+      })
+      const validateData = await validateRes.json()
+      if (validateData.error) {
+        console.error("Failed to validate objective:", validateData.error)
+        setGenerating(false)
+        return
+      }
+
+      // If validation failed, show hints and don't generate
+      if (!validateData.isValid && validateData.issues?.length > 0) {
+        setValidationHints(validateData.issues)
+        setGenerating(false)
+        return
+      }
+
+      // Validation passed, proceed to generate
       const res = await fetch("/api/ai", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -536,6 +559,7 @@ function ObjectiveModal({ onClose, onDone, devMode, onDevCreate, editingObjectiv
         startValue: kr.startValue,
       }))
       setKeyResults(krs)
+      setValidationHints([]) // Clear hints on success
     } catch (e) {
       console.error("Failed to generate key results", e)
     } finally {
@@ -638,23 +662,38 @@ function ObjectiveModal({ onClose, onDone, devMode, onDevCreate, editingObjectiv
     <div className="space-y-4">
       <div>
         <label className="text-xs text-muted-foreground mb-1.5 block">What do you want to achieve?</label>
-        <input value={title} onChange={e => setTitle(e.target.value)} placeholder="e.g. Increase revenue by 50%" required autoFocus className="w-full h-10 border border-border bg-transparent px-3 text-sm placeholder:text-muted-foreground focus:border-foreground focus:outline-none" />
+        <input
+          value={title}
+          onChange={e => {
+            setTitle(e.target.value)
+            setValidationHints(prev => prev.filter(h => h.field !== "title"))
+          }}
+          placeholder="e.g. Increase revenue by 50%"
+          required
+          autoFocus
+          className={`w-full h-10 border bg-transparent px-3 text-sm placeholder:text-muted-foreground focus:outline-none ${validationHints.some(h => h.field === "title") ? "border-amber-500 focus:border-amber-500" : "border-border focus:border-foreground"}`}
+        />
+        {validationHints.filter(h => h.field === "title").map((hint, i) => (
+          <p key={i} className="mt-1.5 text-xs text-amber-600 dark:text-amber-400">{hint.hint}</p>
+        ))}
       </div>
       <div>
         <label className="text-xs text-muted-foreground mb-1.5 block">Why is this important?</label>
-        <textarea 
-          value={description} 
+        <textarea
+          value={description}
           onChange={e => {
             setDescription(e.target.value)
-            e.target.style.height = "auto"
-            e.target.style.height = `${Math.min(e.target.scrollHeight, 120)}px`
-          }} 
-          placeholder="Provide context: why this matters, what success looks like..." 
-          rows={2} 
-          required 
-          minLength={10} 
-          className="w-full border border-border bg-transparent px-3 py-2 text-sm placeholder:text-muted-foreground focus:border-foreground focus:outline-none resize-none overflow-hidden" 
+            setValidationHints(prev => prev.filter(h => h.field !== "description"))
+          }}
+          placeholder="Provide context: why this matters, what success looks like..."
+          rows={3}
+          required
+          minLength={10}
+          className={`w-full h-20 border bg-transparent px-3 py-2 text-sm placeholder:text-muted-foreground focus:outline-none resize-none overflow-y-auto styled-scrollbar ${validationHints.some(h => h.field === "description") ? "border-amber-500 focus:border-amber-500" : "border-border focus:border-foreground"}`}
         />
+        {validationHints.filter(h => h.field === "description").map((hint, i) => (
+          <p key={i} className="mt-1.5 text-xs text-amber-600 dark:text-amber-400">{hint.hint}</p>
+        ))}
       </div>
       <div>
         <label className="text-xs text-muted-foreground mb-1.5 block">Due date</label>

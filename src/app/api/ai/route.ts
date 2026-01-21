@@ -22,6 +22,15 @@ const evaluationSchema = z.object({
   summary: z.string(),
 })
 
+const validationSchema = z.object({
+  isValid: z.boolean(),
+  issues: z.array(z.object({
+    field: z.enum(["title", "description"]),
+    issue: z.string(),
+    hint: z.string(),
+  })),
+})
+
 async function callOpenAI(messages: { role: string; content: string }[]) {
   const apiKey = process.env.OPENAI_API_KEY
   if (!apiKey) {
@@ -54,6 +63,45 @@ export async function POST(request: NextRequest) {
   try {
     const body = await request.json()
     const { action, data } = body
+
+    if (action === "validateObjective") {
+      const { title, description } = data
+      const content = await callOpenAI([
+        {
+          role: "system",
+          content: `You evaluate OKR objective titles and descriptions to determine if they're specific enough to generate good key results. Return JSON:
+{
+  "isValid": boolean,
+  "issues": [{ "field": "title" | "description", "issue": "what's wrong", "hint": "how to fix it" }]
+}
+
+A GOOD objective:
+- Title is specific and outcome-focused (not vague like "Improve X" or "Do Y better")
+- Description provides context: why it matters, what success looks like, any constraints
+- Together they give enough info to generate measurable key results
+
+Mark as invalid if:
+- Title is too vague (e.g., "Improve sales", "Be more efficient")
+- Description is missing or too short to provide context
+- Can't determine what "done" looks like
+
+Be helpful but not overly strict. 1-2 sentences of context is often enough.`
+        },
+        {
+          role: "user",
+          content: `Evaluate this objective for key result generation:
+
+Title: ${title || "(empty)"}
+Description: ${description || "(empty)"}
+
+Can good, specific key results be generated from this?`
+        }
+      ])
+
+      const parsed = JSON.parse(content)
+      const validated = validationSchema.parse(parsed)
+      return NextResponse.json(validated)
+    }
 
     if (action === "generateKeyResults") {
       const { title, description } = data
