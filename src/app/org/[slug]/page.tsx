@@ -1,13 +1,13 @@
-import { createClient } from "@/lib/supabase/server"
-import { AuthForm } from "@/lib/components/auth-form"
-import { Dashboard } from "@/lib/components/dashboard"
 import { redirect } from "next/navigation"
+import { AuthForm } from "@/lib/components/auth"
+import { Dashboard } from "@/lib/components/dashboard"
+import { createClient } from "@/lib/supabase/server"
 
 const DEV_MODE = process.env.NEXT_PUBLIC_DEV_MODE === "true"
 
 export default async function OrgPage({
   params,
-  searchParams
+  searchParams,
 }: {
   params: Promise<{ slug: string }>
   searchParams: Promise<{ setup?: string }>
@@ -17,27 +17,36 @@ export default async function OrgPage({
   const needsOrgName = setup === "1"
 
   if (DEV_MODE) {
-    return <Dashboard
-      user={{ id: "00000000-0000-0000-0000-000000000000", email: "dev@local" } as any}
-      org={{ id: "00000000-0000-0000-0000-000000000001", name: "Dev Org", slug: "dev", domain: "local", auto_join_domain: true, created_by: "00000000-0000-0000-0000-000000000000", created_at: "", updated_at: "" }}
-      orgRole="owner"
-      devMode
-    />
+    return (
+      <Dashboard
+        user={{ id: "00000000-0000-0000-0000-000000000000", email: "dev@local" } as any}
+        org={{
+          id: "00000000-0000-0000-0000-000000000001",
+          name: "Dev Org",
+          slug: "dev",
+          domain: "local",
+          auto_join_domain: true,
+          created_by: "00000000-0000-0000-0000-000000000000",
+          created_at: "",
+          updated_at: "",
+        }}
+        orgRole="owner"
+        devMode
+      />
+    )
   }
 
   const supabase = await createClient()
-  const { data: { user } } = await supabase.auth.getUser()
+  const {
+    data: { user },
+  } = await supabase.auth.getUser()
 
   if (!user) {
     return <AuthForm />
   }
 
   // Get the org by slug
-  const { data: org } = await supabase
-    .from("organizations")
-    .select("*")
-    .eq("slug", slug)
-    .single()
+  const { data: org } = await supabase.from("organizations").select("*").eq("slug", slug).single()
 
   if (!org) {
     redirect("/")
@@ -62,12 +71,21 @@ export default async function OrgPage({
     .eq("user_id", user.id)
     .order("joined_at", { ascending: true })
 
-  const userOrgs = allMemberships
-    ?.filter(m => m.organizations)
-    .map(m => ({
-      ...(m.organizations as any),
-      role: m.role
-    })) || []
+  const userOrgs =
+    allMemberships
+      ?.filter((m) => m.organizations)
+      .map((m) => ({
+        ...(m.organizations as any),
+        role: m.role,
+      })) || []
 
-  return <Dashboard user={user} org={org} orgRole={membership.role as "owner" | "admin" | "member"} needsOrgName={needsOrgName} userOrgs={userOrgs} />
+  return (
+    <Dashboard
+      user={user}
+      org={org}
+      orgRole={membership.role as "owner" | "admin" | "member"}
+      needsOrgName={needsOrgName}
+      userOrgs={userOrgs}
+    />
+  )
 }

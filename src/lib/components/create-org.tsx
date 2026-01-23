@@ -1,9 +1,8 @@
 "use client"
 
-import React from "react"
-
-import { useState } from "react"
 import { Building2 } from "lucide-react"
+import type React from "react"
+import { useState } from "react"
 
 interface CreateOrgProps {
   userEmail: string
@@ -42,18 +41,14 @@ export function CreateOrg({ userEmail, onCreateOrg, onSkip }: CreateOrgProps) {
           Create an organization for your team. Everyone with an @{domain} email can join automatically.
         </p>
 
-        {error && (
-          <div className="mb-4 p-2 bg-red-500/10 border border-red-500/20 text-red-400 text-xs">
-            {error}
-          </div>
-        )}
+        {error && <div className="mb-4 p-2 bg-red-500/10 border border-red-500/20 text-red-400 text-xs">{error}</div>}
 
         <form onSubmit={handleSubmit} className="space-y-4">
           <div>
             <label className="text-xs text-muted-foreground mb-1.5 block">Organization name</label>
             <input
               value={name}
-              onChange={e => setName(e.target.value)}
+              onChange={(e) => setName(e.target.value)}
               placeholder="e.g. Acme Inc"
               required
               autoFocus

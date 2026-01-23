@@ -5,7 +5,11 @@ import { cn } from "@/lib/utils"
 
 const Tabs = React.forwardRef<
   HTMLDivElement,
-  React.HTMLAttributes<HTMLDivElement> & { defaultValue?: string; value?: string; onValueChange?: (value: string) => void }
+  React.HTMLAttributes<HTMLDivElement> & {
+    defaultValue?: string
+    value?: string
+    onValueChange?: (value: string) => void
+  }
 >(({ className, ...props }, ref) => (
   <div ref={ref} data-slot="tabs" className={cn("flex flex-col gap-2", className)} {...props} />
 ))
@@ -16,7 +20,10 @@ const TabsList = React.forwardRef<HTMLDivElement, React.HTMLAttributes<HTMLDivEl
     <div
       ref={ref}
       data-slot="tabs-list"
-      className={cn("bg-muted text-muted-foreground inline-flex h-9 w-fit items-center justify-center rounded-lg p-[3px]", className)}
+      className={cn(
+        "bg-muted text-muted-foreground inline-flex h-9 w-fit items-center justify-center rounded-lg p-[3px]",
+        className
+      )}
       {...props}
     />
   )
@@ -39,17 +46,11 @@ const TabsTrigger = React.forwardRef<
 ))
 TabsTrigger.displayName = "TabsTrigger"
 
-const TabsContent = React.forwardRef<
-  HTMLDivElement,
-  React.HTMLAttributes<HTMLDivElement> & { value?: string }
->(({ className, ...props }, ref) => (
-  <div
-    ref={ref}
-    data-slot="tabs-content"
-    className={cn("flex-1 outline-none", className)}
-    {...props}
-  />
-))
+const TabsContent = React.forwardRef<HTMLDivElement, React.HTMLAttributes<HTMLDivElement> & { value?: string }>(
+  ({ className, ...props }, ref) => (
+    <div ref={ref} data-slot="tabs-content" className={cn("flex-1 outline-none", className)} {...props} />
+  )
+)
 TabsContent.displayName = "TabsContent"
 
 export { Tabs, TabsList, TabsTrigger, TabsContent }

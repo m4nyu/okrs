@@ -1,10 +1,11 @@
 "use client"
 
-import React, { useState, useEffect } from "react"
-import { Mail, Plus, ArrowRight, Check, X, Loader2 } from "lucide-react"
 import type { User } from "@supabase/supabase-js"
-import type { Organization } from "@/lib/types"
+import { ArrowRight, Check, Loader2, Mail, Plus, X } from "lucide-react"
+import type React from "react"
+import { useEffect, useState } from "react"
 import { createClient } from "@/lib/supabase/client"
+import type { Organization } from "@/lib/types"
 
 interface OrgSetupProps {
   user: User
@@ -36,11 +37,7 @@ export function OrgSetup({ user, pendingInvites }: OrgSetupProps) {
 
     const timer = setTimeout(async () => {
       const supabase = createClient()
-      const { data } = await supabase
-        .from("organizations")
-        .select("id")
-        .ilike("name", name.trim())
-        .maybeSingle()
+      const { data } = await supabase.from("organizations").select("id").ilike("name", name.trim()).maybeSingle()
 
       setNameStatus(data ? "taken" : "available")
       setChecking(false)
@@ -89,9 +86,7 @@ export function OrgSetup({ user, pendingInvites }: OrgSetupProps) {
       {/* Dialog */}
       <div className="relative w-full max-w-sm mx-4 bg-background border border-border rounded-lg shadow-lg p-6">
         {error && (
-          <div className="mb-4 p-2 bg-red-500/10 border border-red-500/20 text-red-400 text-xs rounded">
-            {error}
-          </div>
+          <div className="mb-4 p-2 bg-red-500/10 border border-red-500/20 text-red-400 text-xs rounded">{error}</div>
         )}
 
         {mode === "choose" && pendingInvites.length > 0 ? (
@@ -103,7 +98,7 @@ export function OrgSetup({ user, pendingInvites }: OrgSetupProps) {
             </div>
 
             <div className="space-y-2">
-              {pendingInvites.map(invite => (
+              {pendingInvites.map((invite) => (
                 <button
                   key={invite.id}
                   onClick={() => handleAcceptInvite(invite.id)}
@@ -144,7 +139,7 @@ export function OrgSetup({ user, pendingInvites }: OrgSetupProps) {
               <div className="relative">
                 <input
                   value={name}
-                  onChange={e => setName(e.target.value)}
+                  onChange={(e) => setName(e.target.value)}
                   placeholder="e.g. Acme Inc"
                   required
                   autoFocus

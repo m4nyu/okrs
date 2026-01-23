@@ -11,7 +11,7 @@ export const keyResultSchema = z.object({
 export const createObjectiveSchema = z.object({
   title: z.string().min(1, "Title is required").max(200),
   description: z.string().min(10, "Description must provide context (at least 10 characters)").max(1000),
-  endDate: z.string().refine(d => !Number.isNaN(Date.parse(d)), "Invalid date"),
+  endDate: z.string().refine((d) => !Number.isNaN(Date.parse(d)), "Invalid date"),
   keyResults: z.array(keyResultSchema).max(10),
 })
 
@@ -26,7 +26,7 @@ export interface Objective {
   description: string | null
   start_date: string
   end_date: string
-  status: 'active' | 'completed' | 'cancelled'
+  status: "active" | "completed" | "cancelled"
   share_token: string
   is_public: boolean
   created_at: string
@@ -76,7 +76,7 @@ export interface OrgMember {
   id: string
   org_id: string
   user_id: string
-  role: 'owner' | 'admin' | 'member'
+  role: "owner" | "admin" | "member"
   joined_at: string
   user_email?: string
   user_name?: string
@@ -86,7 +86,7 @@ export interface OrgInvite {
   id: string
   org_id: string
   email: string
-  role: 'owner' | 'admin' | 'member'
+  role: "owner" | "admin" | "member"
   invited_by: string
   expires_at: string
   created_at: string

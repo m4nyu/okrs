@@ -1,9 +1,9 @@
 "use client"
 
-import { create } from "zustand"
-import { persist, createJSONStorage } from "zustand/middleware"
 import type { User } from "@supabase/supabase-js"
-import type { Objective, ObjectiveWithProgress, Organization, OrgMember, OrgInvite, KeyResult } from "@/lib/types"
+import { create } from "zustand"
+import { createJSONStorage, persist } from "zustand/middleware"
+import type { Objective, ObjectiveWithProgress, Organization, OrgInvite, OrgMember } from "@/lib/types"
 
 // Key Result form state
 interface KeyResultForm {
@@ -275,13 +275,15 @@ export const useAppStore = create<AppState>()(
       // Actions - Data
       setObjectives: (objectives) => set({ objectives }),
       addObjective: (objective) => set((s) => ({ objectives: [objective, ...s.objectives] })),
-      updateObjective: (id, updates) => set((s) => ({
-        objectives: s.objectives.map((o) => (o.id === id ? { ...o, ...updates } : o)),
-      })),
-      deleteObjective: (id) => set((s) => ({
-        objectives: s.objectives.filter((o) => o.id !== id),
-        selectedIdx: s.selectedIdx >= s.objectives.length - 1 ? Math.max(0, s.objectives.length - 2) : s.selectedIdx,
-      })),
+      updateObjective: (id, updates) =>
+        set((s) => ({
+          objectives: s.objectives.map((o) => (o.id === id ? { ...o, ...updates } : o)),
+        })),
+      deleteObjective: (id) =>
+        set((s) => ({
+          objectives: s.objectives.filter((o) => o.id !== id),
+          selectedIdx: s.selectedIdx >= s.objectives.length - 1 ? Math.max(0, s.objectives.length - 2) : s.selectedIdx,
+        })),
       setOrgMembers: (orgMembers) => set({ orgMembers }),
       setOrgInvites: (orgInvites) => set({ orgInvites }),
 
@@ -306,43 +308,48 @@ export const useAppStore = create<AppState>()(
       closeHelp: () => set({ showHelp: false }),
       openHistoryModal: (objective) => set({ showHistoryModal: true, historyObjective: objective }),
       closeHistoryModal: () => set({ showHistoryModal: false, historyObjective: null }),
-      closeAllModals: () => set({
-        showObjectiveModal: false,
-        showReportModal: false,
-        showOrgSettings: false,
-        showHelp: false,
-        showHistoryModal: false,
-        editingObjective: null,
-        reportingObjective: null,
-        historyObjective: null,
-        menuOpenId: null,
-      }),
+      closeAllModals: () =>
+        set({
+          showObjectiveModal: false,
+          showReportModal: false,
+          showOrgSettings: false,
+          showHelp: false,
+          showHistoryModal: false,
+          editingObjective: null,
+          reportingObjective: null,
+          historyObjective: null,
+          menuOpenId: null,
+        }),
 
       // Actions - Selection
       setSelectedIdx: (selectedIdx) => set({ selectedIdx }),
       setHoveredObjId: (hoveredObjId) => set({ hoveredObjId }),
-      toggleExpanded: (id) => set((s) => {
-        const next = new Set(s.expandedIds)
-        if (next.has(id)) next.delete(id)
-        else next.add(id)
-        return { expandedIds: next }
-      }),
+      toggleExpanded: (id) =>
+        set((s) => {
+          const next = new Set(s.expandedIds)
+          if (next.has(id)) next.delete(id)
+          else next.add(id)
+          return { expandedIds: next }
+        }),
       setMenuOpenId: (menuOpenId) => set({ menuOpenId }),
-      selectNext: () => set((s) => {
-        const next = s.selectedIdx < s.objectives.length - 1 ? s.selectedIdx + 1 : 0
-        return { selectedIdx: next, hoveredObjId: s.objectives[next]?.id || null }
-      }),
-      selectPrev: () => set((s) => {
-        const prev = s.selectedIdx > 0 ? s.selectedIdx - 1 : s.objectives.length - 1
-        return { selectedIdx: prev, hoveredObjId: s.objectives[prev]?.id || null }
-      }),
-      selectByNumber: (num) => set((s) => {
-        const idx = num - 1
-        if (idx >= 0 && idx < s.objectives.length) {
-          return { selectedIdx: idx, hoveredObjId: s.objectives[idx].id }
-        }
-        return {}
-      }),
+      selectNext: () =>
+        set((s) => {
+          const next = s.selectedIdx < s.objectives.length - 1 ? s.selectedIdx + 1 : 0
+          return { selectedIdx: next, hoveredObjId: s.objectives[next]?.id || null }
+        }),
+      selectPrev: () =>
+        set((s) => {
+          const prev = s.selectedIdx > 0 ? s.selectedIdx - 1 : s.objectives.length - 1
+          return { selectedIdx: prev, hoveredObjId: s.objectives[prev]?.id || null }
+        }),
+      selectByNumber: (num) =>
+        set((s) => {
+          const idx = num - 1
+          if (idx >= 0 && idx < s.objectives.length) {
+            return { selectedIdx: idx, hoveredObjId: s.objectives[idx].id }
+          }
+          return {}
+        }),
 
       // Actions - Chart
       setChartPeriod: (chartPeriod) => set({ chartPeriod }),
@@ -368,63 +375,69 @@ export const useAppStore = create<AppState>()(
       setOrgSettingsTab: (orgSettingsTab) => set({ orgSettingsTab }),
 
       // Actions - Objective Form
-      setObjectiveFormField: (field, value) => set((s) => ({
-        objectiveForm: { ...s.objectiveForm, [field]: value },
-      })),
-      addKeyResult: () => set((s) => ({
-        objectiveForm: {
-          ...s.objectiveForm,
-          keyResults: [
-            ...s.objectiveForm.keyResults,
-            { id: crypto.randomUUID(), title: "", targetValue: 100, startValue: 0, unit: "%" },
-          ],
-        },
-      })),
-      updateKeyResult: (id, field, value) => set((s) => ({
-        objectiveForm: {
-          ...s.objectiveForm,
-          keyResults: s.objectiveForm.keyResults.map((kr) =>
-            kr.id === id ? { ...kr, [field]: value } : kr
-          ),
-        },
-      })),
-      removeKeyResult: (id) => set((s) => ({
-        objectiveForm: {
-          ...s.objectiveForm,
-          keyResults: s.objectiveForm.keyResults.filter((kr) => kr.id !== id),
-        },
-      })),
-      setKeyResults: (keyResults) => set((s) => ({
-        objectiveForm: { ...s.objectiveForm, keyResults },
-      })),
+      setObjectiveFormField: (field, value) =>
+        set((s) => ({
+          objectiveForm: { ...s.objectiveForm, [field]: value },
+        })),
+      addKeyResult: () =>
+        set((s) => ({
+          objectiveForm: {
+            ...s.objectiveForm,
+            keyResults: [
+              ...s.objectiveForm.keyResults,
+              { id: crypto.randomUUID(), title: "", targetValue: 100, startValue: 0, unit: "%" },
+            ],
+          },
+        })),
+      updateKeyResult: (id, field, value) =>
+        set((s) => ({
+          objectiveForm: {
+            ...s.objectiveForm,
+            keyResults: s.objectiveForm.keyResults.map((kr) => (kr.id === id ? { ...kr, [field]: value } : kr)),
+          },
+        })),
+      removeKeyResult: (id) =>
+        set((s) => ({
+          objectiveForm: {
+            ...s.objectiveForm,
+            keyResults: s.objectiveForm.keyResults.filter((kr) => kr.id !== id),
+          },
+        })),
+      setKeyResults: (keyResults) =>
+        set((s) => ({
+          objectiveForm: { ...s.objectiveForm, keyResults },
+        })),
       resetObjectiveForm: () => set({ objectiveForm: { ...defaultObjectiveForm } }),
-      populateObjectiveForm: (objective) => set({
-        objectiveForm: {
-          title: objective.title,
-          description: objective.description || "",
-          endDate: objective.end_date || defaultObjectiveForm.endDate,
-          keyResults: objective.key_results.map((kr) => ({
-            id: kr.id,
-            title: kr.title,
-            targetValue: kr.target_value,
-            startValue: kr.current_value,
-            unit: kr.unit,
-          })),
-        },
-      }),
+      populateObjectiveForm: (objective) =>
+        set({
+          objectiveForm: {
+            title: objective.title,
+            description: objective.description || "",
+            endDate: objective.end_date || defaultObjectiveForm.endDate,
+            keyResults: objective.key_results.map((kr) => ({
+              id: kr.id,
+              title: kr.title,
+              targetValue: kr.target_value,
+              startValue: kr.current_value,
+              unit: kr.unit,
+            })),
+          },
+        }),
 
       // Actions - Report Form
-      setReportValue: (krId, value) => set((s) => ({
-        reportForm: { ...s.reportForm, values: { ...s.reportForm.values, [krId]: value } },
-      })),
+      setReportValue: (krId, value) =>
+        set((s) => ({
+          reportForm: { ...s.reportForm, values: { ...s.reportForm.values, [krId]: value } },
+        })),
       setReportNote: (note) => set((s) => ({ reportForm: { ...s.reportForm, note } })),
       resetReportForm: () => set({ reportForm: { ...defaultReportForm } }),
-      populateReportForm: (objective) => set({
-        reportForm: {
-          values: Object.fromEntries(objective.key_results.map((kr) => [kr.id, kr.current_value])),
-          note: "",
-        },
-      }),
+      populateReportForm: (objective) =>
+        set({
+          reportForm: {
+            values: Object.fromEntries(objective.key_results.map((kr) => [kr.id, kr.current_value])),
+            note: "",
+          },
+        }),
 
       // Actions - Invite Form
       setInviteEmail: (email) => set((s) => ({ inviteForm: { ...s.inviteForm, email } })),
@@ -434,11 +447,12 @@ export const useAppStore = create<AppState>()(
       // Actions - Login Form
       setLoginEmail: (loginEmail) => set({ loginEmail }),
       setLoginOtp: (loginOtp) => set({ loginOtp }),
-      setLoginOtpDigit: (index, digit) => set((s) => {
-        const newOtp = [...s.loginOtp]
-        newOtp[index] = digit.slice(-1)
-        return { loginOtp: newOtp }
-      }),
+      setLoginOtpDigit: (index, digit) =>
+        set((s) => {
+          const newOtp = [...s.loginOtp]
+          newOtp[index] = digit.slice(-1)
+          return { loginOtp: newOtp }
+        }),
       setLoginStep: (loginStep) => set({ loginStep }),
       resetLoginForm: () => set({ loginEmail: "", loginOtp: ["", "", "", "", "", ""], loginStep: "email" }),
 
@@ -485,16 +499,16 @@ export const useAppStore = create<AppState>()(
 
 // Selector hooks for common patterns
 export const useObjectives = () => useAppStore((s) => s.objectives)
-export const useSelectedObjective = () => useAppStore((s) =>
-  s.selectedIdx >= 0 && s.selectedIdx < s.objectives.length ? s.objectives[s.selectedIdx] : null
-)
+export const useSelectedObjective = () =>
+  useAppStore((s) => (s.selectedIdx >= 0 && s.selectedIdx < s.objectives.length ? s.objectives[s.selectedIdx] : null))
 export const useIsAdmin = () => useAppStore((s) => s.orgRole === "owner" || s.orgRole === "admin")
 export const useTheme = () => useAppStore((s) => s.theme)
 export const useChartPeriod = () => useAppStore((s) => s.chartPeriod)
-export const useModals = () => useAppStore((s) => ({
-  showObjectiveModal: s.showObjectiveModal,
-  showReportModal: s.showReportModal,
-  showOrgSettings: s.showOrgSettings,
-  showHelp: s.showHelp,
-  showHistoryModal: s.showHistoryModal,
-}))
+export const useModals = () =>
+  useAppStore((s) => ({
+    showObjectiveModal: s.showObjectiveModal,
+    showReportModal: s.showReportModal,
+    showOrgSettings: s.showOrgSettings,
+    showHelp: s.showHelp,
+    showHistoryModal: s.showHistoryModal,
+  }))
