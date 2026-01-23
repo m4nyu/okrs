@@ -901,7 +901,7 @@ export async function updateMemberRole(memberId: string, newRole: "owner" | "adm
   return { success: true }
 }
 
-export async function updateOrgSettings(settings: { name?: string; auto_join_domain?: boolean; domain?: string | null }) {
+export async function updateOrgSettings(orgId: string, settings: { name?: string; auto_join_domain?: boolean; domain?: string | null }) {
   const supabase = await createClient()
   const { data: { user } } = await supabase.auth.getUser()
 
@@ -917,6 +917,7 @@ export async function updateOrgSettings(settings: { name?: string; auto_join_dom
     .from("org_members")
     .select("org_id, role")
     .eq("user_id", user.id)
+    .eq("org_id", orgId)
     .single()
 
   if (!membership || (membership.role !== "owner" && membership.role !== "admin")) {
@@ -931,7 +932,7 @@ export async function updateOrgSettings(settings: { name?: string; auto_join_dom
   const { error } = await adminClient
     .from("organizations")
     .update(updates)
-    .eq("id", membership.org_id)
+    .eq("id", orgId)
 
   if (error) {
     return { error: error.message }

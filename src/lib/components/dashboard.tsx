@@ -5,7 +5,7 @@ import { createClient } from "@/lib/supabase/client"
 import type { User } from "@supabase/supabase-js"
 import type { Objective, KeyResult, ObjectiveWithProgress, Organization, OrgMember, OrgInvite } from "@/lib/types"
 import useSWR from "swr"
-import { Sun, Moon, Monitor, Target, ChevronRight, Plus, Trash2, Sparkles, Loader2, X, Building2, MoreVertical, Circle, Square, Triangle, Diamond, Hexagon, History, ArrowUpDown, ChevronDown } from "lucide-react"
+import { Sun, Moon, Monitor, Target, ChevronRight, Plus, Trash2, Sparkles, Loader2, X, MoreVertical, Circle, Square, Triangle, Diamond, Hexagon } from "lucide-react"
 import { useAppStore } from "@/lib/store"
 import { Drawer, DrawerContent, DrawerHeader, DrawerTitle } from "@/lib/components/ui/drawer"
 import { useIsMobile } from "@/lib/hooks/use-mobile"
@@ -338,9 +338,6 @@ function DashboardCharts({ objectives, hoveredObj, setHoveredObj }: {
       color: colors[idx % colors.length],
     }
   })
-
-  // Today is at the last index (rightmost point)
-  const todayIdx = progressData.length - 1
 
   return (
     <div className="mb-8">
@@ -1140,7 +1137,7 @@ export function Dashboard({ user, org, orgRole, devMode, needsOrgName, userOrgs 
     openObjectiveModal, closeObjectiveModal,
     openReportModal, closeReportModal,
     openOrgSettings, closeOrgSettings,
-    openHelp, closeHelp, closeAllModals,
+    openHelp, closeHelp,
     openHistoryModal, closeHistoryModal,
     setSelectedIdx, setHoveredObjId, toggleExpanded, setMenuOpenId,
     selectNext, selectPrev, selectByNumber,
@@ -1306,10 +1303,6 @@ export function Dashboard({ user, org, orgRole, devMode, needsOrgName, userOrgs 
     window.addEventListener("keydown", onKey)
     return () => window.removeEventListener("keydown", onKey)
   }, [onKey])
-
-  const active = objectives.filter(o => o.status === "active").length
-  const completed = objectives.filter(o => o.overall_progress >= 100).length
-  const avg = objectives.length ? objectives.reduce((a, o) => a + o.overall_progress, 0) / objectives.length : 0
 
   return (
     <div className="h-screen flex flex-col bg-background text-foreground overflow-hidden">
@@ -1552,7 +1545,7 @@ export function Dashboard({ user, org, orgRole, devMode, needsOrgName, userOrgs 
           }}
           onUpdateSettings={async (settings) => {
             const { updateOrgSettings } = await import("@/lib/actions")
-            return updateOrgSettings(settings)
+            return updateOrgSettings(org.id, settings)
           }}
           highlightOrgName={needsOrgName}
         />
