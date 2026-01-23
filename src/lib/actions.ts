@@ -117,17 +117,29 @@ export async function updateObjectiveWithKeyResults(payload: {
   description: string;
   endDate: string;
   keyResults: { id: string; title: string; targetValue: number; unit: string; startValue: number }[];
-}) {
+}, orgId: string) {
   const supabase = await createClient()
   const { data: { user } } = await supabase.auth.getUser()
-  
+
   if (!user) {
     return { error: "Not authenticated" }
   }
 
+  // Verify user is member of the org
+  const { data: membership } = await supabase
+    .from("org_members")
+    .select("role")
+    .eq("org_id", orgId)
+    .eq("user_id", user.id)
+    .single()
+
+  if (!membership) {
+    return { error: "Not authorized for this organization" }
+  }
+
   const { id, title, description, endDate, keyResults } = payload
 
-  // Update objective
+  // Update objective - only if it belongs to this org
   const { error: objError } = await supabase
     .from("objectives")
     .update({
@@ -137,6 +149,7 @@ export async function updateObjectiveWithKeyResults(payload: {
       updated_at: new Date().toISOString(),
     })
     .eq("id", id)
+    .eq("org_id", orgId)
 
   if (objError) {
     return { error: objError.message }
@@ -167,18 +180,42 @@ export async function updateObjectiveWithKeyResults(payload: {
   return { success: true }
 }
 
-export async function createKeyResult(formData: FormData) {
+export async function createKeyResult(formData: FormData, orgId: string) {
   const supabase = await createClient()
   const { data: { user } } = await supabase.auth.getUser()
-  
+
   if (!user) {
     return { error: "Not authenticated" }
+  }
+
+  // Verify user is member of the org
+  const { data: membership } = await supabase
+    .from("org_members")
+    .select("role")
+    .eq("org_id", orgId)
+    .eq("user_id", user.id)
+    .single()
+
+  if (!membership) {
+    return { error: "Not authorized for this organization" }
   }
 
   const objectiveId = formData.get("objective_id") as string
   const title = formData.get("title") as string
   const targetValue = parseFloat(formData.get("target_value") as string)
   const unit = formData.get("unit") as string || "%"
+
+  // Verify objective belongs to this org
+  const { data: objective } = await supabase
+    .from("objectives")
+    .select("id")
+    .eq("id", objectiveId)
+    .eq("org_id", orgId)
+    .single()
+
+  if (!objective) {
+    return { error: "Objective not found in this organization" }
+  }
 
   const { data, error } = await supabase
     .from("key_results")
@@ -199,7 +236,7 @@ export async function createKeyResult(formData: FormData) {
   return { data }
 }
 
-export async function updateKeyResultProgress(keyResultId: string, newValue: number, note?: string) {
+export async function updateKeyResultProgress(keyResultId: string, newValue: number, orgId: string, note?: string) {
   const supabase = await createClient()
   const { data: { user } } = await supabase.auth.getUser()
 
@@ -207,10 +244,22 @@ export async function updateKeyResultProgress(keyResultId: string, newValue: num
     return { error: "Not authenticated" }
   }
 
-  // Get current value first
+  // Verify user is member of the org
+  const { data: membership } = await supabase
+    .from("org_members")
+    .select("role")
+    .eq("org_id", orgId)
+    .eq("user_id", user.id)
+    .single()
+
+  if (!membership) {
+    return { error: "Not authorized for this organization" }
+  }
+
+  // Get key result and verify it belongs to an objective in this org
   const { data: keyResult, error: fetchError } = await supabase
     .from("key_results")
-    .select("current_value")
+    .select("current_value, objectives!inner(org_id)")
     .eq("id", keyResultId)
     .single()
 
@@ -221,6 +270,11 @@ export async function updateKeyResultProgress(keyResultId: string, newValue: num
 
   if (!keyResult) {
     return { error: "Key result not found" }
+  }
+
+  // Verify the key result's objective belongs to this org
+  if ((keyResult as any).objectives?.org_id !== orgId) {
+    return { error: "Key result not found in this organization" }
   }
 
   console.log("Creating progress update:", { keyResultId, previous: keyResult.current_value, new: newValue, note })
@@ -255,19 +309,31 @@ export async function updateKeyResultProgress(keyResultId: string, newValue: num
   return { success: true }
 }
 
-export async function toggleObjectivePublic(objectiveId: string, isPublic: boolean) {
+export async function toggleObjectivePublic(objectiveId: string, isPublic: boolean, orgId: string) {
   const supabase = await createClient()
   const { data: { user } } = await supabase.auth.getUser()
-  
+
   if (!user) {
     return { error: "Not authenticated" }
+  }
+
+  // Verify user is member of the org
+  const { data: membership } = await supabase
+    .from("org_members")
+    .select("role")
+    .eq("org_id", orgId)
+    .eq("user_id", user.id)
+    .single()
+
+  if (!membership) {
+    return { error: "Not authorized for this organization" }
   }
 
   const { error } = await supabase
     .from("objectives")
     .update({ is_public: isPublic })
     .eq("id", objectiveId)
-    .eq("user_id", user.id)
+    .eq("org_id", orgId)
 
   if (error) {
     return { error: error.message }
@@ -277,19 +343,32 @@ export async function toggleObjectivePublic(objectiveId: string, isPublic: boole
   return { success: true }
 }
 
-export async function deleteObjective(objectiveId: string) {
+export async function deleteObjective(objectiveId: string, orgId: string) {
   const supabase = await createClient()
   const { data: { user } } = await supabase.auth.getUser()
-  
+
   if (!user) {
     return { error: "Not authenticated" }
   }
 
+  // Verify user is member of the org with admin/owner role
+  const { data: membership } = await supabase
+    .from("org_members")
+    .select("role")
+    .eq("org_id", orgId)
+    .eq("user_id", user.id)
+    .single()
+
+  if (!membership || (membership.role !== "owner" && membership.role !== "admin")) {
+    return { error: "Only owners and admins can delete objectives" }
+  }
+
+  // Delete objective only if it belongs to this org
   const { error } = await supabase
     .from("objectives")
     .delete()
     .eq("id", objectiveId)
-    .eq("user_id", user.id)
+    .eq("org_id", orgId)
 
   if (error) {
     return { error: error.message }
@@ -299,19 +378,31 @@ export async function deleteObjective(objectiveId: string) {
   return { success: true }
 }
 
-export async function updateObjectiveStatus(objectiveId: string, status: string) {
+export async function updateObjectiveStatus(objectiveId: string, status: string, orgId: string) {
   const supabase = await createClient()
   const { data: { user } } = await supabase.auth.getUser()
-  
+
   if (!user) {
     return { error: "Not authenticated" }
+  }
+
+  // Verify user is member of the org
+  const { data: membership } = await supabase
+    .from("org_members")
+    .select("role")
+    .eq("org_id", orgId)
+    .eq("user_id", user.id)
+    .single()
+
+  if (!membership) {
+    return { error: "Not authorized for this organization" }
   }
 
   const { error } = await supabase
     .from("objectives")
     .update({ status })
     .eq("id", objectiveId)
-    .eq("user_id", user.id)
+    .eq("org_id", orgId)
 
   if (error) {
     return { error: error.message }
