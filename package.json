@@ -4,8 +4,13 @@
   "private": true,
   "scripts": {
     "dev": "next dev",
-    "db:push": "export $(grep SUPABASE_ACCESS_TOKEN .env | xargs) && supabase db push --workdir .supabase",
     "build": "next build",
+    "lint": "biome lint src",
+    "lint:fix": "biome lint --write src",
+    "format": "biome format --write src",
+    "check": "biome check src",
+    "check:fix": "biome check --write src",
+    "db:push": "export $(grep SUPABASE_ACCESS_TOKEN .env | xargs) && supabase db push --workdir .supabase",
     "db:start": "supabase start --workdir .supabase -o toml",
     "db:stop": "supabase stop --workdir .supabase",
     "db:reset": "supabase db reset --workdir .supabase",
@@ -76,6 +81,7 @@
     "zustand": "^5.0.10"
   },
   "devDependencies": {
+    "@biomejs/biome": "^2.3.12",
     "@tailwindcss/postcss": "^4.1.9",
     "@types/node": "^22",
     "@types/react": "^19",

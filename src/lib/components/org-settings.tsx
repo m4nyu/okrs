@@ -1,12 +1,13 @@
 "use client"
 
-import React, { useState, useEffect, useCallback } from "react"
-import type { Organization, OrgMember, OrgInvite } from "@/lib/types"
+import { Check, ChevronDown, Loader2, X } from "lucide-react"
+import type React from "react"
+import { useEffect, useState } from "react"
 import { Drawer, DrawerContent, DrawerHeader, DrawerTitle } from "@/lib/components/ui/drawer"
-import { useIsMobile } from "@/lib/hooks/use-mobile"
 import { ScrollArea } from "@/lib/components/ui/scroll-area"
 import { TabsList, TabsTrigger } from "@/lib/components/ui/tabs"
-import { Loader2, Check, X, ChevronDown } from "lucide-react"
+import { useIsMobile } from "@/lib/hooks/use-mobile"
+import type { Organization, OrgInvite, OrgMember } from "@/lib/types"
 
 // Custom dropdown component that stays within the dialog
 function RoleDropdown({ value, onChange, options }: { value: string; onChange: (v: any) => void; options: string[] }) {
@@ -25,11 +26,14 @@ function RoleDropdown({ value, onChange, options }: { value: string; onChange: (
         <>
           <div className="fixed inset-0 z-50" onClick={() => setOpen(false)} />
           <div className="absolute top-full right-0 mt-1 z-50 bg-background border border-border rounded-md shadow-lg py-1 min-w-[80px]">
-            {options.map(opt => (
+            {options.map((opt) => (
               <button
                 key={opt}
                 type="button"
-                onClick={() => { onChange(opt); setOpen(false) }}
+                onClick={() => {
+                  onChange(opt)
+                  setOpen(false)
+                }}
                 className={`w-full px-3 py-1.5 text-xs text-left hover:bg-muted/50 ${value === opt ? "text-foreground" : "text-muted-foreground"}`}
               >
                 {opt}
@@ -93,7 +97,11 @@ interface OrgSettingsProps {
   onUpdateMemberName: (memberId: string, name: string) => Promise<{ error?: string }>
   onTransferOwnership: (memberId: string) => Promise<{ error?: string }>
   onCancelInvite: (inviteId: string) => Promise<{ error?: string }>
-  onUpdateSettings: (settings: { name?: string; auto_join_domain?: boolean; domain?: string | null }) => Promise<{ error?: string }>
+  onUpdateSettings: (settings: {
+    name?: string
+    auto_join_domain?: boolean
+    domain?: string | null
+  }) => Promise<{ error?: string }>
   highlightOrgName?: boolean
 }
 
@@ -110,7 +118,7 @@ export function OrgSettings({
   onTransferOwnership,
   onCancelInvite,
   onUpdateSettings,
-  highlightOrgName
+  highlightOrgName,
 }: OrgSettingsProps) {
   const isMobile = useIsMobile()
   const [tab, setTab] = useState("members")
@@ -142,7 +150,11 @@ export function OrgSettings({
     const timer = setTimeout(async () => {
       // For now, just simulate a check - names are always available unless empty
       // In a real app, you'd check against the database
-      const slug = orgName.trim().toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/(^-|-$)/g, "")
+      const slug = orgName
+        .trim()
+        .toLowerCase()
+        .replace(/[^a-z0-9]+/g, "-")
+        .replace(/(^-|-$)/g, "")
       if (slug.length < 2) {
         setNameAvailable(false)
         setCheckingName(false)
@@ -155,7 +167,6 @@ export function OrgSettings({
 
     return () => clearTimeout(timer)
   }, [orgName, nameChanged])
-
 
   async function handleSaveOrgName() {
     if (!orgName.trim() || savingName) return
@@ -206,7 +217,7 @@ export function OrgSettings({
     setLoading(false)
   }
 
-  async function handleUpdateMemberRole(memberId: string, newRole: "admin" | "member") {
+  async function _handleUpdateMemberRole(memberId: string, newRole: "admin" | "member") {
     setLoading(true)
     setError("")
     const result = await onUpdateMemberRole(memberId, newRole)
@@ -266,84 +277,93 @@ export function OrgSettings({
       <div className="p-4 space-y-1">
         {members.length === 0 ? (
           <p className="text-sm text-muted-foreground text-center py-12">No members yet</p>
-        ) : members.map(member => (
-          <div key={member.id} className="group flex items-center justify-between h-[52px] px-2 rounded hover:bg-muted/30">
-            <div className="min-w-0 flex-1 flex flex-col justify-center">
-              <div className="h-5 flex items-center">
-                {editingMemberId === member.id ? (
-                  <input
-                    type="text"
-                    value={editingName}
-                    onChange={(e) => setEditingName(e.target.value)}
-                    onKeyDown={(e) => {
-                      if (e.key === "Enter") handleSaveMember(member.id, member.role)
-                      if (e.key === "Escape") setEditingMemberId(null)
-                    }}
-                    autoFocus
-                    className="w-full text-sm bg-transparent border-none outline-none p-0 m-0"
-                    placeholder="Display name"
-                  />
-                ) : (
-                  <span className="text-sm truncate">{member.user_name || member.user_email || member.user_id.slice(0, 8)}</span>
-                )}
-              </div>
-              <div className="h-4 flex items-center">
-                {editingMemberId === member.id ? (
-                  <RoleDropdown
-                    value={editingRole}
-                    onChange={setEditingRole}
-                    options={currentUserRole === "owner" ? ["owner", "admin", "member"] : ["admin", "member"]}
-                  />
-                ) : (
-                  <span className="text-xs text-muted-foreground capitalize">{member.role}</span>
-                )}
-              </div>
-            </div>
-            {isAdmin && (
-              <div className={`flex items-center gap-2 flex-shrink-0 justify-end ${editingMemberId === member.id ? "opacity-100" : "opacity-0 group-hover:opacity-100"}`}>
-                {editingMemberId === member.id ? (
-                  <>
-                    <button
-                      onClick={() => handleSaveMember(member.id, member.role)}
-                      disabled={loading}
-                      className="text-xs text-muted-foreground hover:text-foreground disabled:opacity-50"
-                    >
-                      save
-                    </button>
-                    <button
-                      onClick={() => setEditingMemberId(null)}
-                      className="text-xs text-muted-foreground hover:text-foreground"
-                    >
-                      cancel
-                    </button>
-                  </>
-                ) : (
-                  <>
-                    <button
-                      onClick={() => {
-                        setEditingMemberId(member.id)
-                        setEditingName(member.user_name || member.user_email || "")
-                        setEditingRole(member.role)
+        ) : (
+          members.map((member) => (
+            <div
+              key={member.id}
+              className="group flex items-center justify-between h-[52px] px-2 rounded hover:bg-muted/30"
+            >
+              <div className="min-w-0 flex-1 flex flex-col justify-center">
+                <div className="h-5 flex items-center">
+                  {editingMemberId === member.id ? (
+                    <input
+                      type="text"
+                      value={editingName}
+                      onChange={(e) => setEditingName(e.target.value)}
+                      onKeyDown={(e) => {
+                        if (e.key === "Enter") handleSaveMember(member.id, member.role)
+                        if (e.key === "Escape") setEditingMemberId(null)
                       }}
-                      className="text-xs text-muted-foreground hover:text-foreground"
-                    >
-                      edit
-                    </button>
-                    {member.role !== "owner" && (
-                      <button
-                        onClick={() => handleRemoveMember(member.id)}
-                        disabled={loading}
-                        className="text-xs text-muted-foreground hover:text-red-400 disabled:opacity-50"
-                      >
-                        remove
-                      </button>
-                    )}
-                  </>
-                )}
+                      autoFocus
+                      className="w-full text-sm bg-transparent border-none outline-none p-0 m-0"
+                      placeholder="Display name"
+                    />
+                  ) : (
+                    <span className="text-sm truncate">
+                      {member.user_name || member.user_email || member.user_id.slice(0, 8)}
+                    </span>
+                  )}
+                </div>
+                <div className="h-4 flex items-center">
+                  {editingMemberId === member.id ? (
+                    <RoleDropdown
+                      value={editingRole}
+                      onChange={setEditingRole}
+                      options={currentUserRole === "owner" ? ["owner", "admin", "member"] : ["admin", "member"]}
+                    />
+                  ) : (
+                    <span className="text-xs text-muted-foreground capitalize">{member.role}</span>
+                  )}
+                </div>
               </div>
-            )}
-          </div>
-        ))}
+              {isAdmin && (
+                <div
+                  className={`flex items-center gap-2 flex-shrink-0 justify-end ${editingMemberId === member.id ? "opacity-100" : "opacity-0 group-hover:opacity-100"}`}
+                >
+                  {editingMemberId === member.id ? (
+                    <>
+                      <button
+                        onClick={() => handleSaveMember(member.id, member.role)}
+                        disabled={loading}
+                        className="text-xs text-muted-foreground hover:text-foreground disabled:opacity-50"
+                      >
+                        save
+                      </button>
+                      <button
+                        onClick={() => setEditingMemberId(null)}
+                        className="text-xs text-muted-foreground hover:text-foreground"
+                      >
+                        cancel
+                      </button>
+                    </>
+                  ) : (
+                    <>
+                      <button
+                        onClick={() => {
+                          setEditingMemberId(member.id)
+                          setEditingName(member.user_name || member.user_email || "")
+                          setEditingRole(member.role)
+                        }}
+                        className="text-xs text-muted-foreground hover:text-foreground"
+                      >
+                        edit
+                      </button>
+                      {member.role !== "owner" && (
+                        <button
+                          onClick={() => handleRemoveMember(member.id)}
+                          disabled={loading}
+                          className="text-xs text-muted-foreground hover:text-red-400 disabled:opacity-50"
+                        >
+                          remove
+                        </button>
+                      )}
+                    </>
+                  )}
+                </div>
+              )}
+            </div>
+          ))
+        )}
       </div>
     </ScrollArea>
   )
@@ -397,13 +417,17 @@ export function OrgSettings({
             <input
               type="email"
               value={inviteEmail}
-              onChange={e => setInviteEmail(e.target.value)}
+              onChange={(e) => setInviteEmail(e.target.value)}
               placeholder="email@example.com"
               required
               className="w-full h-9 border border-border bg-background px-3 text-sm placeholder:text-muted-foreground focus:border-foreground focus:outline-none rounded-md"
             />
             <div className="flex gap-2 items-center justify-end">
-              <RoleDropdown value={inviteRole} onChange={setInviteRole} options={currentUserRole === "owner" ? ["member", "admin", "owner"] : ["member", "admin"]} />
+              <RoleDropdown
+                value={inviteRole}
+                onChange={setInviteRole}
+                options={currentUserRole === "owner" ? ["member", "admin", "owner"] : ["member", "admin"]}
+              />
               <button
                 type="submit"
                 disabled={loading || !inviteEmail.trim()}
@@ -423,11 +447,9 @@ export function OrgSettings({
             className="flex items-center justify-between h-9 border border-border bg-muted/30 px-3 rounded-md cursor-pointer hover:bg-muted/50 transition-colors"
           >
             <span className="text-sm text-muted-foreground truncate">
-              {typeof window !== 'undefined' ? window.location.origin : ''}?invite={org.id.slice(0, 8)}...
+              {typeof window !== "undefined" ? window.location.origin : ""}?invite={org.id.slice(0, 8)}...
             </span>
-            <span className="text-xs text-muted-foreground ml-2 flex-shrink-0">
-              {linkCopied ? "copied!" : "copy"}
-            </span>
+            <span className="text-xs text-muted-foreground ml-2 flex-shrink-0">{linkCopied ? "copied!" : "copy"}</span>
           </div>
         </div>
 
@@ -442,7 +464,9 @@ export function OrgSettings({
               disabled={loading || !org.domain}
               className={`w-10 h-5 rounded-full transition-colors relative flex-shrink-0 disabled:opacity-50 ${org.auto_join_domain && org.domain ? "bg-foreground" : "bg-muted"}`}
             >
-              <div className={`absolute top-0.5 w-4 h-4 rounded-full bg-background shadow-sm transition-all ${org.auto_join_domain && org.domain ? "left-5" : "left-0.5"}`} />
+              <div
+                className={`absolute top-0.5 w-4 h-4 rounded-full bg-background shadow-sm transition-all ${org.auto_join_domain && org.domain ? "left-5" : "left-0.5"}`}
+              />
             </button>
           </div>
           {editingDomain ? (
@@ -452,10 +476,17 @@ export function OrgSettings({
                 <input
                   type="text"
                   value={domainValue}
-                  onChange={e => { setDomainValue(e.target.value.replace(/^@/, "")); setDomainError("") }}
-                  onKeyDown={e => {
+                  onChange={(e) => {
+                    setDomainValue(e.target.value.replace(/^@/, ""))
+                    setDomainError("")
+                  }}
+                  onKeyDown={(e) => {
                     if (e.key === "Enter") handleSaveDomain()
-                    if (e.key === "Escape") { setEditingDomain(false); setDomainValue(org.domain || ""); setDomainError("") }
+                    if (e.key === "Escape") {
+                      setEditingDomain(false)
+                      setDomainValue(org.domain || "")
+                      setDomainError("")
+                    }
                   }}
                   placeholder="company.com"
                   autoFocus
@@ -469,7 +500,11 @@ export function OrgSettings({
                   save
                 </button>
                 <button
-                  onClick={() => { setEditingDomain(false); setDomainValue(org.domain || ""); setDomainError("") }}
+                  onClick={() => {
+                    setEditingDomain(false)
+                    setDomainValue(org.domain || "")
+                    setDomainError("")
+                  }}
                   className="text-xs text-muted-foreground hover:text-foreground"
                 >
                   cancel
@@ -492,7 +527,7 @@ export function OrgSettings({
           <div>
             <label className="text-xs text-muted-foreground mb-2 block">Pending invites</label>
             <div className="space-y-1 border border-border rounded-md divide-y divide-border">
-              {invites.map(invite => (
+              {invites.map((invite) => (
                 <div key={invite.id} className="group flex items-center justify-between py-2.5 px-3">
                   <div className="min-w-0">
                     <p className="text-sm truncate">{invite.email}</p>
@@ -500,7 +535,7 @@ export function OrgSettings({
                       {invite.role} · expires {new Date(invite.expires_at).toLocaleDateString()}
                     </p>
                   </div>
-                  <button 
+                  <button
                     type="button"
                     onClick={() => handleCancelInvite(invite.id)}
                     disabled={loading}
@@ -522,16 +557,10 @@ export function OrgSettings({
       {/* Tabs */}
       <div className="px-4 pt-4 pb-2">
         <TabsList className="w-full grid grid-cols-2 h-10">
-          <TabsTrigger
-            data-state={tab === "members" ? "active" : "inactive"}
-            onClick={() => setTab("members")}
-          >
+          <TabsTrigger data-state={tab === "members" ? "active" : "inactive"} onClick={() => setTab("members")}>
             Members
           </TabsTrigger>
-          <TabsTrigger
-            data-state={tab === "invites" ? "active" : "inactive"}
-            onClick={() => setTab("invites")}
-          >
+          <TabsTrigger data-state={tab === "invites" ? "active" : "inactive"} onClick={() => setTab("invites")}>
             Invites
           </TabsTrigger>
         </TabsList>
@@ -542,26 +571,26 @@ export function OrgSettings({
       {success && <p className="px-4 py-2 text-xs text-green-400">{success}</p>}
 
       {/* Content */}
-      <div className="flex-1 overflow-hidden">
-        {tab === "members" ? membersContent : invitesContent}
-      </div>
+      <div className="flex-1 overflow-hidden">{tab === "members" ? membersContent : invitesContent}</div>
     </div>
   )
 
   if (isMobile) {
     return (
-      <Drawer open onOpenChange={open => !open && onClose()}>
+      <Drawer open onOpenChange={(open) => !open && onClose()}>
         <DrawerContent className="!mt-0 h-[80dvh] !max-h-[80dvh] flex flex-col">
           <DrawerHeader className="pb-0 select-none flex-shrink-0">
             <DrawerTitle asChild>
               <div className="flex items-center gap-2">
-                <div className={`w-5 h-5 flex items-center justify-center text-[10px] font-semibold text-white flex-shrink-0 ${getOrgColor(orgName || org.name)}`}>
+                <div
+                  className={`w-5 h-5 flex items-center justify-center text-[10px] font-semibold text-white flex-shrink-0 ${getOrgColor(orgName || org.name)}`}
+                >
                   {getOrgInitials(orgName || org.name)}
                 </div>
                 <input
                   value={orgName}
-                  onChange={e => setOrgName(e.target.value)}
-                  onKeyDown={e => e.key === "Enter" && handleSaveOrgName()}
+                  onChange={(e) => setOrgName(e.target.value)}
+                  onKeyDown={(e) => e.key === "Enter" && handleSaveOrgName()}
                   onBlur={handleSaveOrgName}
                   disabled={!isAdmin}
                   autoFocus={highlightOrgName}
@@ -570,9 +599,11 @@ export function OrgSettings({
                   }`}
                 />
                 {nameChanged && checkingName && <Loader2 className="h-3.5 w-3.5 animate-spin text-muted-foreground" />}
-              {nameChanged && !checkingName && nameAvailable === true && <Check className="h-3.5 w-3.5 text-green-500" />}
-              {nameChanged && !checkingName && nameAvailable === false && <X className="h-3.5 w-3.5 text-red-500" />}
-              {savingName && <span className="text-xs text-muted-foreground">saving...</span>}
+                {nameChanged && !checkingName && nameAvailable === true && (
+                  <Check className="h-3.5 w-3.5 text-green-500" />
+                )}
+                {nameChanged && !checkingName && nameAvailable === false && <X className="h-3.5 w-3.5 text-red-500" />}
+                {savingName && <span className="text-xs text-muted-foreground">saving...</span>}
               </div>
             </DrawerTitle>
           </DrawerHeader>
@@ -584,25 +615,39 @@ export function OrgSettings({
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4" onClick={onClose}>
-      <div className="w-full max-w-md h-[520px] max-h-[85vh] flex flex-col border border-border bg-background overflow-hidden" onClick={e => e.stopPropagation()}>
+      <div
+        className="w-full max-w-md h-[520px] max-h-[85vh] flex flex-col border border-border bg-background overflow-hidden"
+        onClick={(e) => e.stopPropagation()}
+      >
         <div className="flex justify-between items-center gap-3 px-4 py-3 border-b border-border select-none flex-shrink-0">
-          <div className={`w-5 h-5 flex items-center justify-center text-[10px] font-semibold text-white flex-shrink-0 ${getOrgColor(orgName || org.name)}`}>
+          <div
+            className={`w-5 h-5 flex items-center justify-center text-[10px] font-semibold text-white flex-shrink-0 ${getOrgColor(orgName || org.name)}`}
+          >
             {getOrgInitials(orgName || org.name)}
           </div>
           <input
             value={orgName}
-            onChange={e => setOrgName(e.target.value)}
-            onKeyDown={e => e.key === "Enter" && handleSaveOrgName()}
+            onChange={(e) => setOrgName(e.target.value)}
+            onKeyDown={(e) => e.key === "Enter" && handleSaveOrgName()}
             onBlur={handleSaveOrgName}
             disabled={!isAdmin}
             autoFocus={highlightOrgName}
             className={`flex-1 min-w-0 h-8 bg-transparent text-sm font-medium border-none outline-none ${!isAdmin ? "opacity-60" : ""}`}
           />
-          {nameChanged && checkingName && <Loader2 className="h-3.5 w-3.5 animate-spin text-muted-foreground flex-shrink-0" />}
-          {nameChanged && !checkingName && nameAvailable === true && <Check className="h-3.5 w-3.5 text-green-500 flex-shrink-0" />}
-          {nameChanged && !checkingName && nameAvailable === false && <X className="h-3.5 w-3.5 text-red-500 flex-shrink-0" />}
+          {nameChanged && checkingName && (
+            <Loader2 className="h-3.5 w-3.5 animate-spin text-muted-foreground flex-shrink-0" />
+          )}
+          {nameChanged && !checkingName && nameAvailable === true && (
+            <Check className="h-3.5 w-3.5 text-green-500 flex-shrink-0" />
+          )}
+          {nameChanged && !checkingName && nameAvailable === false && (
+            <X className="h-3.5 w-3.5 text-red-500 flex-shrink-0" />
+          )}
           {savingName && <span className="text-xs text-muted-foreground flex-shrink-0">saving...</span>}
-          <button onClick={onClose} className="text-xs text-muted-foreground hover:text-foreground flex items-center gap-1.5 flex-shrink-0">
+          <button
+            onClick={onClose}
+            className="text-xs text-muted-foreground hover:text-foreground flex items-center gap-1.5 flex-shrink-0"
+          >
             close <kbd className="px-1 py-0.5 bg-muted font-mono text-[10px]">Esc</kbd>
           </button>
         </div>

@@ -1,34 +1,43 @@
-import { NextRequest, NextResponse } from "next/server"
+import { type NextRequest, NextResponse } from "next/server"
 import { z } from "zod"
 
 const keyResultsSchema = z.object({
-  keyResults: z.array(z.object({
-    title: z.string(),
-    targetValue: z.number(),
-    unit: z.enum(["%", "#", "$", "hrs", "users", "score"]),
-    startValue: z.number(),
-  })).min(2).max(5),
+  keyResults: z
+    .array(
+      z.object({
+        title: z.string(),
+        targetValue: z.number(),
+        unit: z.enum(["%", "#", "$", "hrs", "users", "score"]),
+        startValue: z.number(),
+      })
+    )
+    .min(2)
+    .max(5),
 })
 
 const evaluationSchema = z.object({
   score: z.number().min(0).max(2),
-  issues: z.array(z.object({
-    type: z.enum(["objective", "key_result"]),
-    target: z.string().optional(),
-    issue: z.string(),
-    suggestion: z.string(),
-  })),
+  issues: z.array(
+    z.object({
+      type: z.enum(["objective", "key_result"]),
+      target: z.string().optional(),
+      issue: z.string(),
+      suggestion: z.string(),
+    })
+  ),
   strengths: z.array(z.string()),
   summary: z.string(),
 })
 
 const validationSchema = z.object({
   isValid: z.boolean(),
-  issues: z.array(z.object({
-    field: z.enum(["title", "description"]),
-    issue: z.string(),
-    hint: z.string(),
-  })),
+  issues: z.array(
+    z.object({
+      field: z.enum(["title", "description"]),
+      issue: z.string(),
+      hint: z.string(),
+    })
+  ),
 })
 
 async function callOpenAI(messages: { role: string; content: string }[]) {
@@ -41,7 +50,7 @@ async function callOpenAI(messages: { role: string; content: string }[]) {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
-      "Authorization": `Bearer ${apiKey}`,
+      Authorization: `Bearer ${apiKey}`,
     },
     body: JSON.stringify({
       model: "gpt-4o-mini",
@@ -85,7 +94,7 @@ Mark as invalid if:
 - Description is missing or too short to provide context
 - Can't determine what "done" looks like
 
-Be helpful but not overly strict. 1-2 sentences of context is often enough.`
+Be helpful but not overly strict. 1-2 sentences of context is often enough.`,
         },
         {
           role: "user",
@@ -94,8 +103,8 @@ Be helpful but not overly strict. 1-2 sentences of context is often enough.`
 Title: ${title || "(empty)"}
 Description: ${description || "(empty)"}
 
-Can good, specific key results be generated from this?`
-        }
+Can good, specific key results be generated from this?`,
+        },
       ])
 
       const parsed = JSON.parse(content)
@@ -114,7 +123,7 @@ Can good, specific key results be generated from this?`
     { "title": "string", "targetValue": number, "unit": "%" | "#" | "$" | "hrs" | "users" | "score", "startValue": number }
   ]
 }
-Generate 3-5 key results. Units must be one of: %, #, $, hrs, users, score`
+Generate 3-5 key results. Units must be one of: %, #, $, hrs, users, score`,
         },
         {
           role: "user",
@@ -123,8 +132,8 @@ Generate 3-5 key results. Units must be one of: %, #, $, hrs, users, score`
 Title: ${title}
 ${description ? `Description: ${description}` : ""}
 
-Key results should be specific, measurable, ambitious but achievable, with clear numeric targets.`
-        }
+Key results should be specific, measurable, ambitious but achievable, with clear numeric targets.`,
+        },
       ])
 
       const parsed = JSON.parse(content)
@@ -143,7 +152,7 @@ Key results should be specific, measurable, ambitious but achievable, with clear
   "issues": [{ "type": "objective" | "key_result", "target": "optional string", "issue": "string", "suggestion": "string" }],
   "strengths": ["string"],
   "summary": "string"
-}`
+}`,
         },
         {
           role: "user",
@@ -156,8 +165,8 @@ KEY RESULTS:
 ${keyResults.map((kr: { title: string; startValue: number; targetValue: number; unit: string }, i: number) => `${i + 1}. ${kr.title} (${kr.startValue} → ${kr.targetValue} ${kr.unit})`).join("\n")}
 
 Evaluate based on: SPECIFIC, MEASURABLE, ACHIEVABLE, RELEVANT, TIME-BOUND.
-Check for: vague objectives, wrong number of KRs (ideal 3-5), tasks instead of outcomes, misaligned metrics.`
-        }
+Check for: vague objectives, wrong number of KRs (ideal 3-5), tasks instead of outcomes, misaligned metrics.`,
+        },
       ])
 
       const parsed = JSON.parse(content)

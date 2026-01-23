@@ -1,8 +1,8 @@
 "use client"
 
-import { useState } from "react"
+import { ChevronDown, Loader2, Plus } from "lucide-react"
 import { useRouter } from "next/navigation"
-import { ChevronDown, Plus, Loader2 } from "lucide-react"
+import { useState } from "react"
 import type { Organization } from "@/lib/types"
 
 interface OrgWithRole extends Organization {
@@ -98,7 +98,9 @@ export function OrgSwitcher({ currentOrg, orgs, onCreateOrg, onEditOrg, openUp }
         onClick={() => setOpen(!open)}
         className="flex items-center gap-2 hover:bg-muted/50 rounded-md px-2 py-1.5 -ml-2 transition-colors"
       >
-        <div className={`w-3.5 h-3.5 flex items-center justify-center text-[8px] font-semibold text-white ${getOrgColor(currentOrg.name)}`}>
+        <div
+          className={`w-3.5 h-3.5 flex items-center justify-center text-[8px] font-semibold text-white ${getOrgColor(currentOrg.name)}`}
+        >
           {getOrgInitials(currentOrg.name)}
         </div>
         <span className="text-sm font-medium max-w-[120px] truncate">{currentOrg.name}</span>
@@ -107,16 +109,13 @@ export function OrgSwitcher({ currentOrg, orgs, onCreateOrg, onEditOrg, openUp }
 
       {open && (
         <>
+          <div className="fixed inset-0 z-40" onClick={() => setOpen(false)} />
           <div
-            className="fixed inset-0 z-40"
-            onClick={() => setOpen(false)}
-          />
-          <div className={`absolute w-56 bg-background border border-border rounded-md shadow-lg z-50 py-1 ${openUp ? "bottom-full left-0 mb-1" : "top-full left-0 mt-1"}`}>
-            <div className="px-2 py-1.5 text-xs text-muted-foreground font-medium">
-              Organizations
-            </div>
+            className={`absolute w-56 bg-background border border-border rounded-md shadow-lg z-50 py-1 ${openUp ? "bottom-full left-0 mb-1" : "top-full left-0 mt-1"}`}
+          >
+            <div className="px-2 py-1.5 text-xs text-muted-foreground font-medium">Organizations</div>
 
-            {orgs.map(o => (
+            {orgs.map((o) => (
               <div
                 key={o.id}
                 className={`flex items-center gap-2 px-2 py-2 transition-colors ${o.id === currentOrg.id ? "bg-muted/50" : "hover:bg-muted/50"}`}
@@ -126,7 +125,9 @@ export function OrgSwitcher({ currentOrg, orgs, onCreateOrg, onEditOrg, openUp }
                   className="flex items-center gap-2 flex-1 min-w-0"
                   onClick={(e) => handleOrgClick(o, e)}
                 >
-                  <div className={`w-5 h-5 flex items-center justify-center text-[10px] font-semibold text-white flex-shrink-0 ${getOrgColor(o.name)}`}>
+                  <div
+                    className={`w-5 h-5 flex items-center justify-center text-[10px] font-semibold text-white flex-shrink-0 ${getOrgColor(o.name)}`}
+                  >
                     {getOrgInitials(o.name)}
                   </div>
                   <div className="flex-1 min-w-0">
