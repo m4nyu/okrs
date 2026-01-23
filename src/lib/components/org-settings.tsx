@@ -584,7 +584,7 @@ export function OrgSettings({
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4" onClick={onClose}>
-      <div className="w-full max-w-md h-[420px] flex flex-col border border-border bg-background overflow-hidden" onClick={e => e.stopPropagation()}>
+      <div className="w-full max-w-md h-[520px] max-h-[85vh] flex flex-col border border-border bg-background overflow-hidden" onClick={e => e.stopPropagation()}>
         <div className="flex justify-between items-center gap-3 px-4 py-3 border-b border-border select-none flex-shrink-0">
           <div className={`w-5 h-5 flex items-center justify-center text-[10px] font-semibold text-white flex-shrink-0 ${getOrgColor(orgName || org.name)}`}>
             {getOrgInitials(orgName || org.name)}
