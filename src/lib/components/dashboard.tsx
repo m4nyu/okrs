@@ -160,7 +160,7 @@ function ThemeBtn({ mobileOrg, mobileUserOrgs, mobileOpenOrgSettings, mobileSign
 // Period types for chart view
 type ChartPeriod = "1M" | "Q" | "Y"
 
-// Dashboard charts component with burndown
+// Dashboard charts component showing historical progress
 function DashboardCharts({ objectives, hoveredObj, setHoveredObj }: {
   objectives: ObjectiveWithProgress[];
   hoveredObj: string | null;
@@ -168,34 +168,46 @@ function DashboardCharts({ objectives, hoveredObj, setHoveredObj }: {
 }) {
   const { chartPeriod: period, setChartPeriod: setPeriod } = useAppStore()
 
-  // Calculate period bounds based on selection
-  // Current date is always at the left edge, period extends to the right
+  // Calculate period bounds - start from earliest objective, extend by period
   const getPeriodBounds = () => {
     const now = new Date()
     const todayOnly = new Date(now.getFullYear(), now.getMonth(), now.getDate())
 
-    let endDate: Date
+    // Find earliest objective creation date
+    let earliestDate: Date = new Date(todayOnly)
+    objectives.forEach(obj => {
+      const created = new Date(obj.created_at)
+      created.setHours(0, 0, 0, 0)
+      if (created < earliestDate) {
+        earliestDate = created
+      }
+    })
 
+    // Calculate end date based on period from earliest objective
+    let periodEnd: Date
     switch (period) {
       case "1M":
-        endDate = new Date(todayOnly)
-        endDate.setMonth(endDate.getMonth() + 1)
+        periodEnd = new Date(earliestDate)
+        periodEnd.setMonth(periodEnd.getMonth() + 1)
         break
       case "Q":
-        endDate = new Date(todayOnly)
-        endDate.setMonth(endDate.getMonth() + 3)
+        periodEnd = new Date(earliestDate)
+        periodEnd.setMonth(periodEnd.getMonth() + 3)
         break
       case "Y":
-        endDate = new Date(todayOnly)
-        endDate.setFullYear(endDate.getFullYear() + 1)
+        periodEnd = new Date(earliestDate)
+        periodEnd.setFullYear(periodEnd.getFullYear() + 1)
         break
     }
 
-    return { startDate: todayOnly, endDate, todayOnly }
+    // End date is the later of: period end or today
+    const endDate = periodEnd > todayOnly ? periodEnd : todayOnly
+
+    return { startDate: earliestDate, endDate, todayOnly }
   }
 
-  // Generate burndown data for each objective
-  const generateBurndownData = () => {
+  // Generate progress data for each objective over time
+  const generateProgressData = () => {
     if (objectives.length === 0) return []
 
     const { startDate, endDate, todayOnly } = getPeriodBounds()
@@ -212,17 +224,16 @@ function DashboardCharts({ objectives, hoveredObj, setHoveredObj }: {
       current.setDate(current.getDate() + intervalDays)
     }
 
-    // Ensure end date is included
+    // Ensure end date (today) is included
     if (points[points.length - 1]?.getTime() !== endDate.getTime()) {
       points.push(new Date(endDate))
     }
 
-    // Also add key dates: objective creation dates and progress update dates (only up to today)
+    // Also add key dates: objective creation dates and progress update dates
     objectives.forEach(obj => {
       const created = new Date(obj.created_at)
       created.setHours(0, 0, 0, 0)
-      if (created >= startDate && created <= endDate && created <= todayOnly) {
-        // Check if this date is not already in points (within 1 day tolerance)
+      if (created >= startDate && created <= endDate) {
         const exists = points.some(p => Math.abs(p.getTime() - created.getTime()) < 86400000)
         if (!exists) points.push(created)
       }
@@ -232,7 +243,7 @@ function DashboardCharts({ objectives, hoveredObj, setHoveredObj }: {
         updates.forEach((u: any) => {
           const updateDate = new Date(u.created_at)
           updateDate.setHours(0, 0, 0, 0)
-          if (updateDate >= startDate && updateDate <= todayOnly && updateDate <= endDate) {
+          if (updateDate >= startDate && updateDate <= endDate) {
             const exists = points.some(p => Math.abs(p.getTime() - updateDate.getTime()) < 86400000)
             if (!exists) points.push(updateDate)
           }
@@ -240,7 +251,7 @@ function DashboardCharts({ objectives, hoveredObj, setHoveredObj }: {
       })
     })
 
-    // Sort all points
+    // Sort all points chronologically
     points.sort((a, b) => a.getTime() - b.getTime())
 
     // Helper to calculate progress at a given date
@@ -291,10 +302,10 @@ function DashboardCharts({ objectives, hoveredObj, setHoveredObj }: {
         const dateOnly = new Date(date.getFullYear(), date.getMonth(), date.getDate())
 
         if (dateOnly > todayOnly) {
-          // Future date - don't show line (extends X-axis only)
+          // Future date - don't show line
           entry[`obj${idx}`] = null
         } else if (dateOnly < objCreated) {
-          // Before objective started - don't show line
+          // Before objective was created - don't show line
           entry[`obj${idx}`] = null
         } else if (dateOnly.getTime() === objCreated.getTime()) {
           // At objective start date - begin at 0%
@@ -312,7 +323,7 @@ function DashboardCharts({ objectives, hoveredObj, setHoveredObj }: {
     })
   }
 
-  const burndownData = React.useMemo(() => generateBurndownData(), [period, objectives])
+  const progressData = React.useMemo(() => generateProgressData(), [period, objectives])
 
   // Colors for different objectives
   const colors = CHART_COLORS
@@ -328,8 +339,8 @@ function DashboardCharts({ objectives, hoveredObj, setHoveredObj }: {
     }
   })
 
-  // Today is always at index 0 since the period starts from today
-  const todayIdx = 0
+  // Today is at the last index (rightmost point)
+  const todayIdx = progressData.length - 1
 
   return (
     <div className="mb-8">
@@ -352,7 +363,7 @@ function DashboardCharts({ objectives, hoveredObj, setHoveredObj }: {
             </div>
           </div>
           <ChartContainer config={chartConfig} className="h-64 w-full">
-            <LineChart data={burndownData} margin={{ top: 10, right: 10, left: 0, bottom: 0 }} style={{ transition: 'none' }}>
+            <LineChart data={progressData} margin={{ top: 10, right: 40, left: 0, bottom: 0 }} style={{ transition: 'none' }}>
               <CartesianGrid strokeDasharray="3 3" className="stroke-border" />
               <XAxis
                 dataKey="date"
@@ -360,7 +371,7 @@ function DashboardCharts({ objectives, hoveredObj, setHoveredObj }: {
                 tickLine={false}
                 axisLine={false}
                 className="text-muted-foreground"
-                interval={period === "1M" ? 2 : period === "Q" ? 6 : 13}
+                interval={progressData.length <= 14 ? 0 : Math.max(1, Math.floor(progressData.length / 10))}
               />
               <YAxis
                 domain={[0, 100]}
@@ -374,29 +385,25 @@ function DashboardCharts({ objectives, hoveredObj, setHoveredObj }: {
                 reversed
               />
               <ChartTooltip
-                content={({ active, payload }) => {
-                  if (!active || !payload?.length) return null
+                cursor={false}
+                trigger="hover"
+                content={() => {
+                  if (!hoveredObj) return null
+                  const obj = objectives.find(o => o.id === hoveredObj)
+                  if (!obj) return null
                   return (
-                    <div className="bg-background border border-border p-2 text-xs space-y-2">
-                      {payload.map((entry: any, i: number) => {
-                        const obj = objectives[i]
-                        if (!obj || entry.value === null) return null
-                        return (
-                          <div key={obj.id}>
-                            <div className="flex items-center justify-between gap-4">
-                              <span className="font-medium">{obj.title}</span>
-                              <span className="text-muted-foreground font-mono">{Math.round(entry.value)}%</span>
-                            </div>
-                            {obj.key_results.length > 0 && (
-                              <div className="mt-1 space-y-0.5 text-muted-foreground font-mono">
-                                {obj.key_results.map((kr) => (
-                                  <div key={kr.id}>{kr.current_value}/{kr.target_value}{kr.unit}</div>
-                                ))}
-                              </div>
-                            )}
-                          </div>
-                        )
-                      })}
+                    <div className="bg-background border border-border p-2 text-xs">
+                      <div className="flex items-center justify-between gap-4">
+                        <span className="font-medium truncate max-w-48">{obj.title}</span>
+                        <span className="text-muted-foreground font-mono">{Math.round(obj.overall_progress)}%</span>
+                      </div>
+                      {obj.key_results.length > 0 && (
+                        <div className="mt-1 space-y-0.5 text-muted-foreground font-mono">
+                          {obj.key_results.map((kr) => (
+                            <div key={kr.id}>{kr.current_value}/{kr.target_value}{kr.unit}</div>
+                          ))}
+                        </div>
+                      )}
                     </div>
                   )
                 }}
@@ -407,21 +414,23 @@ function DashboardCharts({ objectives, hoveredObj, setHoveredObj }: {
                 const IconComponent = OKR_ICONS[idx % OKR_ICONS.length]
                 const color = colors[idx % colors.length]
                 // Find first non-null data point index for this objective
-                const startIdx = burndownData.findIndex(d => (d as any)[`obj${idx}`] !== null && (d as any)[`obj${idx}`] !== undefined)
+                const startIdx = progressData.findIndex(d => (d as any)[`obj${idx}`] !== null && (d as any)[`obj${idx}`] !== undefined)
+                // Find last non-null data point index (today or last data point)
+                const endIdx = progressData.reduce((last, d, i) => (d as any)[`obj${idx}`] !== null ? i : last, -1)
                 return (
                   <Line
                     key={obj.id}
                     type="monotone"
                     dataKey={`obj${idx}`}
                     stroke={color}
-                    strokeWidth={isHovered ? 3 : 2}
+                    strokeWidth={3}
                     strokeOpacity={isOtherHovered ? 0.2 : 1}
                     connectNulls={false}
                     isAnimationActive={false}
                     dot={(props: any) => {
                       const opacity = isOtherHovered ? 0.2 : 1
                       const size = 8
-                      // Show icon at start point
+                      // Show icon at start point (always visible)
                       if (props.index === startIdx && props.cx && props.cy) {
                         return (
                           <foreignObject
@@ -436,8 +445,8 @@ function DashboardCharts({ objectives, hoveredObj, setHoveredObj }: {
                           </foreignObject>
                         )
                       }
-                      // Show dot at today's position (current progress)
-                      if (props.index === todayIdx && props.cx && props.cy) {
+                      // Show dot at end point (always visible)
+                      if (props.index === endIdx && props.cx && props.cy) {
                         return (
                           <circle
                             key={props.key}
@@ -451,10 +460,12 @@ function DashboardCharts({ objectives, hoveredObj, setHoveredObj }: {
                       }
                       return <circle key={props.key} r={0} />
                     }}
-                    activeDot={{ r: 4, fill: color, stroke: color }}
+                    activeDot={false}
                     name={obj.title.length > 20 ? obj.title.slice(0, 20) + "..." : obj.title}
                     onMouseEnter={() => setHoveredObj(obj.id)}
                     onMouseLeave={() => setHoveredObj(null)}
+                    className="cursor-pointer"
+                    strokeLinecap="round"
                   />
                 )
               })}
@@ -1018,39 +1029,23 @@ function HelpModal({ onClose }: { onClose: () => void }) {
 // History Modal - shows all progress updates for an objective
 function HistoryModal({ objective, onClose }: { objective: Objective; onClose: () => void }) {
   const isMobile = useIsMobile()
-  const [filterKr, setFilterKr] = useState<string>("all")
-  const [sortNewest, setSortNewest] = useState(true)
-  const [filterOpen, setFilterOpen] = useState(false)
 
-  // Flatten all progress updates with KR info
-  const allUpdates = objective.key_results.flatMap(kr =>
-    (kr.progress_updates || []).map(u => ({
-      ...u,
-      krId: kr.id,
-      krTitle: kr.title,
-      unit: kr.unit,
-    }))
-  )
-
-  // Apply filter
-  const filteredUpdates = filterKr === "all"
-    ? allUpdates
-    : allUpdates.filter(u => u.krId === filterKr)
-
-  // Apply sort
-  const sortedUpdates = [...filteredUpdates].sort((a, b) => {
-    const diff = new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
-    return sortNewest ? diff : -diff
-  })
+  // Flatten all progress updates with KR info, sorted by newest first
+  const sortedUpdates = objective.key_results
+    .flatMap(kr =>
+      (kr.progress_updates || []).map(u => ({
+        ...u,
+        krTitle: kr.title,
+        unit: kr.unit,
+      }))
+    )
+    .sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime())
 
   const content = (
     <div className="flex flex-col h-full">
       {/* Header */}
-      <div className="flex justify-between items-start mb-2 select-none flex-shrink-0">
-        <div>
-          <span className="font-medium text-sm">Progress History</span>
-          <p className="text-xs text-muted-foreground mt-0.5 pr-4">{objective.title}</p>
-        </div>
+      <div className="flex justify-between items-center mb-3 select-none flex-shrink-0">
+        <span className="font-medium text-sm">Progress History</span>
         {!isMobile && (
           <button onClick={onClose} className="flex items-center gap-1.5 text-muted-foreground hover:text-foreground flex-shrink-0">
             <X className="h-3.5 w-3.5" />
@@ -1059,85 +1054,46 @@ function HistoryModal({ objective, onClose }: { objective: Objective; onClose: (
         )}
       </div>
 
-      {/* Filters */}
-      <div className="flex items-center gap-2 mb-3 flex-shrink-0">
-        {/* KR Filter dropdown */}
-        <div className="relative flex-1">
-          <button
-            onClick={() => setFilterOpen(!filterOpen)}
-            className="w-full h-8 px-2 text-xs border border-border bg-transparent flex items-center justify-between hover:border-foreground/50"
-          >
-            <span className="truncate">
-              {filterKr === "all" ? "All Key Results" : objective.key_results.find(kr => kr.id === filterKr)?.title || "All"}
-            </span>
-            <ChevronDown className={`h-3.5 w-3.5 flex-shrink-0 ml-1 transition-transform ${filterOpen ? "rotate-180" : ""}`} />
-          </button>
-          {filterOpen && (
-            <>
-              <div className="fixed inset-0 z-40" onClick={() => setFilterOpen(false)} />
-              <div className="absolute left-0 top-full mt-1 z-50 w-full bg-popover border border-border shadow-md py-1 max-h-48 overflow-y-auto">
-                <button
-                  onClick={() => { setFilterKr("all"); setFilterOpen(false) }}
-                  className={`w-full px-2 py-1.5 text-left text-xs hover:bg-muted/50 ${filterKr === "all" ? "bg-muted/30" : ""}`}
-                >
-                  All Key Results
-                </button>
-                {objective.key_results.map(kr => (
-                  <button
-                    key={kr.id}
-                    onClick={() => { setFilterKr(kr.id); setFilterOpen(false) }}
-                    className={`w-full px-2 py-1.5 text-left text-xs hover:bg-muted/50 truncate ${filterKr === kr.id ? "bg-muted/30" : ""}`}
-                  >
-                    {kr.title}
-                  </button>
-                ))}
-              </div>
-            </>
-          )}
-        </div>
-
-        {/* Sort toggle */}
-        <button
-          onClick={() => setSortNewest(!sortNewest)}
-          className="h-8 px-2 text-xs border border-border bg-transparent flex items-center gap-1.5 hover:border-foreground/50 flex-shrink-0"
-        >
-          <ArrowUpDown className="h-3.5 w-3.5" />
-          {sortNewest ? "Newest" : "Oldest"}
-        </button>
-      </div>
-
-      {/* History list */}
+      {/* History timeline */}
       <ScrollArea className="flex-1 min-h-0">
         {sortedUpdates.length === 0 ? (
           <div className="text-center py-8 text-sm text-muted-foreground">
             No progress updates yet
           </div>
         ) : (
-          <div className="space-y-2 pr-3">
-            {sortedUpdates.map(u => {
-              const delta = u.new_value - u.previous_value
-              const deltaColor = delta > 0 ? "text-green-500" : delta < 0 ? "text-red-500" : "text-muted-foreground"
-              const deltaText = delta > 0 ? `+${delta}` : delta.toString()
+          <div className="relative pr-3">
+            {/* Timeline line */}
+            <div className="absolute left-[5px] top-2 bottom-2 w-px bg-border" />
+            <div className="space-y-4">
+              {sortedUpdates.map(u => {
+                const delta = u.new_value - u.previous_value
+                const deltaColor = delta > 0 ? "text-green-500" : delta < 0 ? "text-red-500" : "text-muted-foreground"
+                const deltaText = delta > 0 ? `+${delta}` : delta.toString()
 
-              return (
-                <div key={u.id} className="border border-border p-2.5 rounded-sm">
-                  <div className="flex items-center justify-between mb-1">
-                    <span className="text-[10px] text-muted-foreground">
-                      {new Date(u.created_at).toLocaleDateString("en-US", { month: "short", day: "numeric" })},{" "}
-                      {new Date(u.created_at).toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" })}
-                    </span>
-                    <span className={`text-xs font-mono ${deltaColor}`}>{deltaText}</span>
+                return (
+                  <div key={u.id} className="relative pl-6">
+                    {/* Timeline dot */}
+                    <div className="absolute left-0 top-1 w-[11px] h-[11px] rounded-full border-2 border-border bg-background" />
+                    <div className="flex flex-col gap-0.5">
+                      <div className="flex items-center gap-2">
+                        <span className="text-[10px] text-muted-foreground">
+                          {new Date(u.created_at).toLocaleDateString("en-US", { month: "short", day: "numeric" })},{" "}
+                          {new Date(u.created_at).toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" })}
+                        </span>
+                        <span className={`text-xs font-mono ${deltaColor}`}>{deltaText}</span>
+                      </div>
+                      <p className="text-xs truncate" title={u.krTitle}>{u.krTitle}</p>
+                      <p className="text-xs text-muted-foreground font-mono">
+                        {u.previous_value} → {u.new_value} {u.unit}
+                      </p>
+                      {u.note && (
+                        <p className="text-xs text-muted-foreground mt-0.5 italic">"{u.note}"</p>
+                      )}
+                    </div>
                   </div>
-                  <p className="text-xs mb-1 truncate" title={u.krTitle}>{u.krTitle}</p>
-                  <p className="text-xs text-muted-foreground font-mono">
-                    {u.previous_value} → {u.new_value} {u.unit}
-                  </p>
-                  {u.note && (
-                    <p className="text-xs text-muted-foreground mt-1.5 italic">"{u.note}"</p>
-                  )}
-                </div>
-              )
-            })}
+                )
+              })}
+            </div>
           </div>
         )}
       </ScrollArea>
@@ -1428,7 +1384,7 @@ export function Dashboard({ user, org, orgRole, devMode, needsOrgName, userOrgs 
                         const IconComponent = OKR_ICONS[i % OKR_ICONS.length]
                         return <IconComponent strokeWidth={0} className={`h-2.5 w-2.5 flex-shrink-0 ${CHART_FILL_CLASSES[i % CHART_FILL_CLASSES.length]}`} />
                       })()}
-                      <div className="min-w-0"><span className="text-sm">{obj.title}</span></div>
+                      <div className="min-w-0 max-w-md"><span className="text-sm block truncate" title={obj.title}>{obj.title}</span></div>
                       <div className="flex-1 flex items-center justify-center">
                         {obj.key_results.length > 0 && (
                           <div className="flex items-center gap-6 text-xs font-mono text-muted-foreground">
@@ -1480,7 +1436,7 @@ export function Dashboard({ user, org, orgRole, devMode, needsOrgName, userOrgs 
                     </div>
                     {expandedIds.has(obj.id) && (
                       <div className="px-4 pb-1 pl-11">
-                        {obj.description && <p className="text-xs text-muted-foreground mb-1">{obj.description}</p>}
+                        {obj.description && <p className="text-xs text-muted-foreground mb-1 truncate" title={obj.description}>{obj.description}</p>}
                         <div>
                           {obj.key_results.map(kr => {
                             const p = kr.target_value === 0 ? 0 : kr.current_value <= kr.target_value
@@ -1496,29 +1452,6 @@ export function Dashboard({ user, org, orgRole, devMode, needsOrgName, userOrgs 
                             )
                           })}
                         </div>
-                        {/* History section */}
-                        {(() => {
-                          const allUpdates = obj.key_results.flatMap(kr =>
-                            (kr.progress_updates || []).map(u => ({ ...u, krTitle: kr.title, unit: kr.unit }))
-                          ).sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime())
-                          if (allUpdates.length === 0) return null
-                          return (
-                            <div className="mt-2 pt-2 border-t border-border">
-                              <p className="text-[10px] text-muted-foreground mb-1">History</p>
-                              <div className="space-y-0.5">
-                                {allUpdates.slice(0, 5).map(u => (
-                                  <div key={u.id} className="flex items-center gap-2 text-[10px]">
-                                    <span className="text-muted-foreground w-16 flex-shrink-0">{new Date(u.created_at).toLocaleDateString("en-US", { month: "short", day: "numeric" })}</span>
-                                    <span className="truncate flex-1">{u.krTitle}</span>
-                                    <span className="text-muted-foreground">{u.previous_value} → {u.new_value} {u.unit}</span>
-                                    {u.note && <span className="text-muted-foreground truncate max-w-24" title={u.note}>"{u.note}"</span>}
-                                  </div>
-                                ))}
-                                {allUpdates.length > 5 && <p className="text-[10px] text-muted-foreground">+{allUpdates.length - 5} more</p>}
-                              </div>
-                            </div>
-                          )
-                        })()}
                       </div>
                     )}
                   </div>
