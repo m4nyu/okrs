@@ -1,6 +1,7 @@
 "use client"
 
-import { Check, ChevronDown, Loader2, X } from "lucide-react"
+import { Check, ChevronDown, Loader2, Plus, X } from "lucide-react"
+import { useRouter } from "next/navigation"
 import type React from "react"
 import { useEffect, useState } from "react"
 import { Drawer, DrawerContent, DrawerHeader, DrawerTitle } from "@/lib/components/ui/drawer"
@@ -9,7 +10,42 @@ import { TabsList, TabsTrigger } from "@/lib/components/ui/tabs"
 import { useIsMobile } from "@/lib/hooks/use-mobile"
 import type { Organization, OrgInvite, OrgMember } from "@/lib/types"
 
-// Custom dropdown component that stays within the dialog
+const ORG_COLORS = [
+  "bg-red-500",
+  "bg-orange-500",
+  "bg-amber-500",
+  "bg-yellow-500",
+  "bg-lime-500",
+  "bg-green-500",
+  "bg-emerald-500",
+  "bg-teal-500",
+  "bg-cyan-500",
+  "bg-sky-500",
+  "bg-blue-500",
+  "bg-indigo-500",
+  "bg-violet-500",
+  "bg-purple-500",
+  "bg-fuchsia-500",
+  "bg-pink-500",
+  "bg-rose-500",
+]
+
+function getOrgColor(name: string): string {
+  let hash = 0
+  for (let i = 0; i < name.length; i++) {
+    hash = name.charCodeAt(i) + ((hash << 5) - hash)
+  }
+  return ORG_COLORS[Math.abs(hash) % ORG_COLORS.length]
+}
+
+function getOrgInitials(name: string): string {
+  const words = name.trim().split(/\s+/)
+  if (words.length === 1) {
+    return words[0].substring(0, 2).toUpperCase()
+  }
+  return (words[0][0] + words[1][0]).toUpperCase()
+}
+
 function RoleDropdown({ value, onChange, options }: { value: string; onChange: (v: any) => void; options: string[] }) {
   const [open, setOpen] = useState(false)
   return (
@@ -46,43 +82,125 @@ function RoleDropdown({ value, onChange, options }: { value: string; onChange: (
   )
 }
 
-// Generate a consistent color based on org name
-function getOrgColor(name: string): string {
-  const colors = [
-    "bg-red-500",
-    "bg-orange-500",
-    "bg-amber-500",
-    "bg-yellow-500",
-    "bg-lime-500",
-    "bg-green-500",
-    "bg-emerald-500",
-    "bg-teal-500",
-    "bg-cyan-500",
-    "bg-sky-500",
-    "bg-blue-500",
-    "bg-indigo-500",
-    "bg-violet-500",
-    "bg-purple-500",
-    "bg-fuchsia-500",
-    "bg-pink-500",
-    "bg-rose-500",
-  ]
-
-  let hash = 0
-  for (let i = 0; i < name.length; i++) {
-    hash = name.charCodeAt(i) + ((hash << 5) - hash)
-  }
-
-  return colors[Math.abs(hash) % colors.length]
+interface OrgWithRole extends Organization {
+  role?: string
 }
 
-// Get initials from org name (max 2 characters)
-function getOrgInitials(name: string): string {
-  const words = name.trim().split(/\s+/)
-  if (words.length === 1) {
-    return words[0].substring(0, 2).toUpperCase()
+interface OrgSwitcherProps {
+  currentOrg: Organization
+  orgs: OrgWithRole[]
+  onCreateOrg?: () => void
+  onEditOrg?: (org: Organization) => void
+  openUp?: boolean
+}
+
+export function OrgSwitcher({ currentOrg, orgs, onCreateOrg, onEditOrg, openUp }: OrgSwitcherProps) {
+  const [open, setOpen] = useState(false)
+  const [switching, setSwitching] = useState(false)
+  const router = useRouter()
+
+  function handleOrgClick(o: OrgWithRole, e: React.MouseEvent) {
+    e.preventDefault()
+    if (o.id === currentOrg.id) {
+      setOpen(false)
+      return
+    }
+    setSwitching(true)
+    setOpen(false)
+    router.push(`/org/${o.slug}`)
   }
-  return (words[0][0] + words[1][0]).toUpperCase()
+
+  if (switching) {
+    return (
+      <>
+        <div className="fixed inset-0 z-[100] flex items-center justify-center bg-background">
+          <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />
+        </div>
+        <div className="relative opacity-0" data-org-switcher>
+          <button className="flex items-center gap-2 px-2 py-1.5 -ml-2">
+            <div className="w-3.5 h-3.5" />
+            <span className="text-sm font-medium">{currentOrg.name}</span>
+          </button>
+        </div>
+      </>
+    )
+  }
+
+  return (
+    <div className="relative" data-org-switcher>
+      <button
+        onClick={() => setOpen(!open)}
+        className="flex items-center gap-2 hover:bg-muted/50 rounded-md px-2 py-1.5 -ml-2 transition-colors"
+      >
+        <div
+          className={`w-3.5 h-3.5 flex items-center justify-center text-[8px] font-semibold text-white ${getOrgColor(currentOrg.name)}`}
+        >
+          {getOrgInitials(currentOrg.name)}
+        </div>
+        <span className="text-sm font-medium max-w-[120px] truncate">{currentOrg.name}</span>
+        <ChevronDown className={`h-3.5 w-3.5 text-muted-foreground transition-transform ${open ? "rotate-180" : ""}`} />
+      </button>
+
+      {open && (
+        <>
+          <div className="fixed inset-0 z-40" onClick={() => setOpen(false)} />
+          <div
+            className={`absolute w-56 bg-background border border-border rounded-md shadow-lg z-50 py-1 ${openUp ? "bottom-full left-0 mb-1" : "top-full left-0 mt-1"}`}
+          >
+            <div className="px-2 py-1.5 text-xs text-muted-foreground font-medium">Organizations</div>
+
+            {orgs.map((o) => (
+              <div
+                key={o.id}
+                className={`flex items-center gap-2 px-2 py-2 transition-colors ${o.id === currentOrg.id ? "bg-muted/50" : "hover:bg-muted/50"}`}
+              >
+                <a
+                  href={`/org/${o.slug}`}
+                  className="flex items-center gap-2 flex-1 min-w-0"
+                  onClick={(e) => handleOrgClick(o, e)}
+                >
+                  <div
+                    className={`w-5 h-5 flex items-center justify-center text-[10px] font-semibold text-white flex-shrink-0 ${getOrgColor(o.name)}`}
+                  >
+                    {getOrgInitials(o.name)}
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <p className="text-xs truncate">{o.name}</p>
+                    <p className="text-[9px] text-muted-foreground capitalize">{o.role}</p>
+                  </div>
+                </a>
+                {(o.role === "owner" || o.role === "admin") && (
+                  <button
+                    onClick={(e) => {
+                      e.stopPropagation()
+                      setOpen(false)
+                      onEditOrg?.(o)
+                    }}
+                    className="text-xs text-muted-foreground hover:text-foreground transition-colors flex-shrink-0"
+                  >
+                    edit
+                  </button>
+                )}
+              </div>
+            ))}
+
+            <div className="border-t border-border mt-1 pt-1">
+              <button
+                onClick={() => {
+                  setOpen(false)
+                  onCreateOrg?.()
+                }}
+                className="flex items-center gap-2 px-2 py-2 w-full hover:bg-muted/50 transition-colors text-muted-foreground hover:text-foreground"
+              >
+                <Plus className="h-3.5 w-3.5" />
+                <span className="text-sm">Create organization</span>
+              </button>
+            </div>
+          </div>
+        </>
+      )}
+    </div>
+  )
 }
 
 interface OrgSettingsProps {
@@ -115,7 +233,6 @@ export function OrgSettings({
   onRemoveMember,
   onUpdateMemberRole,
   onUpdateMemberName,
-  onTransferOwnership,
   onCancelInvite,
   onUpdateSettings,
   highlightOrgName,
@@ -132,11 +249,16 @@ export function OrgSettings({
   const [savingName, setSavingName] = useState(false)
   const [checkingName, setCheckingName] = useState(false)
   const [nameAvailable, setNameAvailable] = useState<boolean | null>(null)
+  const [editingMemberId, setEditingMemberId] = useState<string | null>(null)
+  const [editingName, setEditingName] = useState("")
+  const [editingRole, setEditingRole] = useState<"owner" | "admin" | "member">("member")
+  const [editingDomain, setEditingDomain] = useState(false)
+  const [domainValue, setDomainValue] = useState(org.domain || "")
+  const [domainError, setDomainError] = useState("")
 
   const isAdmin = currentUserRole === "owner" || currentUserRole === "admin"
   const nameChanged = orgName.trim() !== org.name && orgName.trim().length > 0
 
-  // Debounced name availability check
   useEffect(() => {
     if (!nameChanged) {
       setNameAvailable(null)
@@ -147,9 +269,7 @@ export function OrgSettings({
     setCheckingName(true)
     setNameAvailable(null)
 
-    const timer = setTimeout(async () => {
-      // For now, just simulate a check - names are always available unless empty
-      // In a real app, you'd check against the database
+    const timer = setTimeout(() => {
       const slug = orgName
         .trim()
         .toLowerCase()
@@ -160,7 +280,6 @@ export function OrgSettings({
         setCheckingName(false)
         return
       }
-      // Simulate API check
       setNameAvailable(true)
       setCheckingName(false)
     }, 500)
@@ -217,14 +336,6 @@ export function OrgSettings({
     setLoading(false)
   }
 
-  async function _handleUpdateMemberRole(memberId: string, newRole: "admin" | "member") {
-    setLoading(true)
-    setError("")
-    const result = await onUpdateMemberRole(memberId, newRole)
-    if (result.error) setError(result.error)
-    setLoading(false)
-  }
-
   async function toggleDomainAccess() {
     setLoading(true)
     setError("")
@@ -240,15 +351,10 @@ export function OrgSettings({
     setTimeout(() => setLinkCopied(false), 2000)
   }
 
-  const [editingMemberId, setEditingMemberId] = useState<string | null>(null)
-  const [editingName, setEditingName] = useState("")
-  const [editingRole, setEditingRole] = useState<"owner" | "admin" | "member">("member")
-
   async function handleSaveMember(memberId: string, originalRole: "owner" | "admin" | "member") {
     setLoading(true)
     setError("")
 
-    // Save name if changed
     if (editingName.trim()) {
       const nameResult = await onUpdateMemberName(memberId, editingName.trim())
       if (nameResult.error) {
@@ -258,7 +364,6 @@ export function OrgSettings({
       }
     }
 
-    // Handle role change (multiple owners allowed)
     if (editingRole !== originalRole) {
       const roleResult = await onUpdateMemberRole(memberId, editingRole as "owner" | "admin" | "member")
       if (roleResult.error) {
@@ -269,6 +374,39 @@ export function OrgSettings({
     }
 
     setEditingMemberId(null)
+    setLoading(false)
+  }
+
+  function isValidDomain(domain: string): boolean {
+    const domainRegex = /^[a-z0-9]([a-z0-9-]*[a-z0-9])?(\.[a-z0-9]([a-z0-9-]*[a-z0-9])?)+$/i
+    return domainRegex.test(domain)
+  }
+
+  async function handleSaveDomain() {
+    const trimmed = domainValue.trim().toLowerCase()
+
+    if (!trimmed) {
+      setLoading(true)
+      setDomainError("")
+      await onUpdateSettings({ domain: null, auto_join_domain: false })
+      setLoading(false)
+      setEditingDomain(false)
+      return
+    }
+
+    if (!isValidDomain(trimmed)) {
+      setDomainError("Invalid domain format")
+      return
+    }
+
+    setLoading(true)
+    setDomainError("")
+    const result = await onUpdateSettings({ domain: trimmed })
+    if (result.error) {
+      setDomainError(result.error)
+    } else {
+      setEditingDomain(false)
+    }
     setLoading(false)
   }
 
@@ -368,49 +506,9 @@ export function OrgSettings({
     </ScrollArea>
   )
 
-  const [editingDomain, setEditingDomain] = useState(false)
-  const [domainValue, setDomainValue] = useState(org.domain || "")
-  const [domainError, setDomainError] = useState("")
-
-  function isValidDomain(domain: string): boolean {
-    // Basic domain validation: letters, numbers, hyphens, dots, at least one dot
-    const domainRegex = /^[a-z0-9]([a-z0-9-]*[a-z0-9])?(\.[a-z0-9]([a-z0-9-]*[a-z0-9])?)+$/i
-    return domainRegex.test(domain)
-  }
-
-  async function handleSaveDomain() {
-    const trimmed = domainValue.trim().toLowerCase()
-
-    if (!trimmed) {
-      // Clear domain
-      setLoading(true)
-      setDomainError("")
-      await onUpdateSettings({ domain: null, auto_join_domain: false })
-      setLoading(false)
-      setEditingDomain(false)
-      return
-    }
-
-    if (!isValidDomain(trimmed)) {
-      setDomainError("Invalid domain format")
-      return
-    }
-
-    setLoading(true)
-    setDomainError("")
-    const result = await onUpdateSettings({ domain: trimmed })
-    if (result.error) {
-      setDomainError(result.error)
-    } else {
-      setEditingDomain(false)
-    }
-    setLoading(false)
-  }
-
   const invitesContent = (
     <ScrollArea className="h-full">
       <div className="p-4 space-y-8">
-        {/* Email invite */}
         <div className="space-y-3">
           <label className="text-[10px] text-muted-foreground/70 uppercase tracking-wide">Email</label>
           <form onSubmit={handleInvite} className="flex flex-col gap-2">
@@ -439,7 +537,6 @@ export function OrgSettings({
           </form>
         </div>
 
-        {/* Invite link */}
         <div className="space-y-3">
           <label className="text-[10px] text-muted-foreground/70 uppercase tracking-wide">Link</label>
           <div
@@ -453,7 +550,6 @@ export function OrgSettings({
           </div>
         </div>
 
-        {/* Domain auto-join */}
         <div className="space-y-3">
           <label className="text-[10px] text-muted-foreground/70 uppercase tracking-wide">Domain</label>
           <div className="flex items-center justify-between">
@@ -522,7 +618,6 @@ export function OrgSettings({
           )}
         </div>
 
-        {/* Pending invites */}
         {invites.length > 0 && (
           <div>
             <label className="text-xs text-muted-foreground mb-2 block">Pending invites</label>
@@ -554,7 +649,6 @@ export function OrgSettings({
 
   const content = (
     <div className="flex flex-col h-full">
-      {/* Tabs */}
       <div className="px-4 pt-4 pb-2">
         <TabsList className="w-full grid grid-cols-2 h-10">
           <TabsTrigger data-state={tab === "members" ? "active" : "inactive"} onClick={() => setTab("members")}>
@@ -566,11 +660,9 @@ export function OrgSettings({
         </TabsList>
       </div>
 
-      {/* Feedback */}
       {error && <p className="px-4 py-2 text-xs text-red-400">{error}</p>}
       {success && <p className="px-4 py-2 text-xs text-green-400">{success}</p>}
 
-      {/* Content */}
       <div className="flex-1 overflow-hidden">{tab === "members" ? membersContent : invitesContent}</div>
     </div>
   )
