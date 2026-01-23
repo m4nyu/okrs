@@ -1,7 +1,7 @@
 import { redirect } from "next/navigation"
 import { generateAndCreateOrg } from "@/lib/actions"
 import { AuthForm } from "@/lib/components/auth"
-import { Dashboard } from "@/lib/components/dashboard"
+import { Objectives } from "@/lib/components/objectives"
 import { createClient } from "@/lib/supabase/server"
 
 const DEV_MODE = process.env.NEXT_PUBLIC_DEV_MODE === "true"
@@ -11,7 +11,7 @@ export default async function Home({ searchParams }: { searchParams: Promise<{ n
 
   if (DEV_MODE) {
     return (
-      <Dashboard
+      <Objectives
         user={{ id: "00000000-0000-0000-0000-000000000000", email: "dev@local" } as any}
         org={{
           id: "00000000-0000-0000-0000-000000000001",

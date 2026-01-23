@@ -1,6 +1,6 @@
 import { redirect } from "next/navigation"
 import { AuthForm } from "@/lib/components/auth"
-import { Dashboard } from "@/lib/components/dashboard"
+import { Objectives } from "@/lib/components/objectives"
 import { createClient } from "@/lib/supabase/server"
 
 const DEV_MODE = process.env.NEXT_PUBLIC_DEV_MODE === "true"
@@ -18,7 +18,7 @@ export default async function OrgPage({
 
   if (DEV_MODE) {
     return (
-      <Dashboard
+      <Objectives
         user={{ id: "00000000-0000-0000-0000-000000000000", email: "dev@local" } as any}
         org={{
           id: "00000000-0000-0000-0000-000000000001",
@@ -80,7 +80,7 @@ export default async function OrgPage({
       })) || []
 
   return (
-    <Dashboard
+    <Objectives
       user={user}
       org={org}
       orgRole={membership.role as "owner" | "admin" | "member"}
