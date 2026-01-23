@@ -50,9 +50,9 @@ interface Props {
   userOrgs?: OrgWithRole[]
 }
 
-async function fetchData() {
+async function fetchData(orgId: string) {
   const supabase = createClient()
-  const { data } = await supabase.from("objectives").select(`*, key_results (*, progress_updates (*))`).order("created_at", { ascending: false })
+  const { data } = await supabase.from("objectives").select(`*, key_results (*, progress_updates (*))`).eq("org_id", orgId).order("created_at", { ascending: false })
   if (!data) return []
   return data.map(obj => {
     const krs = (obj as Objective & { key_results: (KeyResult & { progress_updates: any[] })[] }).key_results || []
@@ -475,13 +475,14 @@ function DashboardCharts({ objectives, hoveredObj, setHoveredObj }: {
 }
 
 // Objective Modal component
-function ObjectiveModal({ onClose, onDone, devMode, onDevCreate, editingObjective, onDevUpdate }: { 
-  onClose: () => void; 
-  onDone: () => void; 
-  devMode?: boolean; 
+function ObjectiveModal({ onClose, onDone, devMode, onDevCreate, editingObjective, onDevUpdate, orgId }: {
+  onClose: () => void;
+  onDone: () => void;
+  devMode?: boolean;
   onDevCreate?: (obj: Objective) => void;
   editingObjective?: Objective | null;
   onDevUpdate?: (obj: Objective) => void;
+  orgId: string;
 }) {
   const isMobile = useIsMobile()
   const [loading, setLoading] = useState(false)
@@ -661,7 +662,7 @@ function ObjectiveModal({ onClose, onDone, devMode, onDevCreate, editingObjectiv
           unit: kr.unit,
           startValue: kr.startValue,
         })),
-      })
+      }, orgId)
     }
     onDone()
   }
@@ -1145,7 +1146,7 @@ export function Dashboard({ user, org, orgRole, devMode, needsOrgName, userOrgs 
   } = useAppStore()
 
   const [devObjectives, setDevObjectives] = useState<Objective[]>([])
-  const { data: dbObjectives = [], mutate } = useSWR(devMode ? null : "objectives", fetchData)
+  const { data: dbObjectives = [], mutate } = useSWR(devMode ? null : `objectives-${org.id}`, () => fetchData(org.id))
   const supabase = createClient()
   const isAdmin = orgRole === "owner" || orgRole === "admin"
 
@@ -1474,6 +1475,7 @@ export function Dashboard({ user, org, orgRole, devMode, needsOrgName, userOrgs 
         editingObjective={editingObjective}
         onDevCreate={(obj) => setDevObjectives(prev => [obj, ...prev])}
         onDevUpdate={(updatedObj) => setDevObjectives(prev => prev.map(o => o.id === updatedObj.id ? updatedObj : o))}
+        orgId={org.id}
       />}
       {showReportModal && reportingObjective && <ReportModal
         objective={reportingObjective}

@@ -4,10 +4,10 @@ import { createClient } from "@/lib/supabase/server"
 import { revalidatePath } from "next/cache"
 import type { Objective, KeyResult } from "@/lib/types"
 
-export async function createObjective(formData: FormData) {
+export async function createObjective(formData: FormData, orgId: string) {
   const supabase = await createClient()
   const { data: { user } } = await supabase.auth.getUser()
-  
+
   if (!user) {
     return { error: "Not authenticated" }
   }
@@ -20,6 +20,7 @@ export async function createObjective(formData: FormData) {
     .from("objectives")
     .insert({
       user_id: user.id,
+      org_id: orgId,
       title,
       description,
       end_date: endDate,
@@ -35,20 +36,20 @@ export async function createObjective(formData: FormData) {
   return { data }
 }
 
-export async function createObjectiveWithKeyResults(payload: unknown) {
+export async function createObjectiveWithKeyResults(payload: unknown, orgId: string) {
   const { createObjectiveSchema } = await import("@/lib/types")
-  
+
   // Validate with Zod
   const parsed = createObjectiveSchema.safeParse(payload)
   if (!parsed.success) {
     return { error: parsed.error.errors.map(e => e.message).join(", ") }
   }
-  
+
   const { title, description, endDate, keyResults } = parsed.data
-  
+
   const supabase = await createClient()
   const { data: { user } } = await supabase.auth.getUser()
-  
+
   if (!user) {
     return { error: "Not authenticated" }
   }
@@ -58,6 +59,7 @@ export async function createObjectiveWithKeyResults(payload: unknown) {
     .from("objectives")
     .insert({
       user_id: user.id,
+      org_id: orgId,
       title,
       description: description || null,
       end_date: endDate,
