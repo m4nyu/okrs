@@ -649,7 +649,7 @@ function ObjectiveModal({ onClose, onDone, devMode, onDevCreate, editingObjectiv
           unit: kr.unit,
           startValue: kr.startValue,
         })),
-      })
+      }, orgId)
     } else {
       const { createObjectiveWithKeyResults } = await import("@/lib/actions")
       await createObjectiveWithKeyResults({
@@ -844,12 +844,13 @@ function ObjectiveModal({ onClose, onDone, devMode, onDevCreate, editingObjectiv
 
 // Key Result Modal
 // Report Progress Modal
-function ReportModal({ objective, onClose, onDone, devMode, onDevUpdate }: {
+function ReportModal({ objective, onClose, onDone, devMode, onDevUpdate, orgId }: {
   objective: Objective;
   onClose: () => void;
   onDone: () => void;
   devMode?: boolean;
   onDevUpdate?: (obj: Objective) => void;
+  orgId: string;
 }) {
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -897,7 +898,7 @@ function ReportModal({ objective, onClose, onDone, devMode, onDevUpdate }: {
         console.log(`KR "${kr.title}": current=${kr.current_value}, new=${newValue}, changed=${newValue !== kr.current_value}`)
         if (newValue !== kr.current_value) {
           updatedCount++
-          const result = await updateKeyResultProgress(kr.id, newValue, note || undefined)
+          const result = await updateKeyResultProgress(kr.id, newValue, orgId, note || undefined)
           if (result.error) {
             setError(result.error)
             setLoading(false)
@@ -1185,9 +1186,10 @@ export function Dashboard({ user, org, orgRole, devMode, needsOrgName, userOrgs 
       setDevObjectives(prev => prev.filter(o => o.id !== id))
       return
     }
-    await supabase.from("objectives").delete().eq("id", id)
+    const { deleteObjective } = await import("@/lib/actions")
+    await deleteObjective(id, org.id)
     mutate()
-  }, [devMode, supabase, mutate])
+  }, [devMode, org.id, mutate])
 
   const onKey = useCallback((e: KeyboardEvent) => {
     // Skip if typing in input/textarea
@@ -1483,6 +1485,7 @@ export function Dashboard({ user, org, orgRole, devMode, needsOrgName, userOrgs 
         onDone={() => { closeReportModal(); if (!devMode) mutate() }}
         devMode={devMode}
         onDevUpdate={(updatedObj) => setDevObjectives(prev => prev.map(o => o.id === updatedObj.id ? updatedObj : o))}
+        orgId={org.id}
       />}
       {showOrgSettings && (
         <OrgSettings
