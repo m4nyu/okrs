@@ -1,7 +1,8 @@
 "use client"
 
 import { useState } from "react"
-import { ChevronDown, Plus } from "lucide-react"
+import { useRouter } from "next/navigation"
+import { ChevronDown, Plus, Loader2 } from "lucide-react"
 import type { Organization } from "@/lib/types"
 
 interface OrgWithRole extends Organization {
@@ -57,6 +58,39 @@ interface OrgSwitcherProps {
 
 export function OrgSwitcher({ currentOrg, orgs, onCreateOrg, onEditOrg, openUp }: OrgSwitcherProps) {
   const [open, setOpen] = useState(false)
+  const [switching, setSwitching] = useState(false)
+  const router = useRouter()
+
+  function handleOrgClick(o: OrgWithRole, e: React.MouseEvent) {
+    e.preventDefault()
+    if (o.id === currentOrg.id) {
+      // Same org - just close dropdown
+      setOpen(false)
+      return
+    }
+    // Different org - show loading and navigate
+    setSwitching(true)
+    setOpen(false)
+    router.push(`/org/${o.slug}`)
+  }
+
+  // Show full-screen loading overlay when switching
+  if (switching) {
+    return (
+      <>
+        <div className="fixed inset-0 z-[100] flex items-center justify-center bg-background">
+          <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />
+        </div>
+        {/* Keep the switcher button visible underneath */}
+        <div className="relative opacity-0" data-org-switcher>
+          <button className="flex items-center gap-2 px-2 py-1.5 -ml-2">
+            <div className="w-3.5 h-3.5" />
+            <span className="text-sm font-medium">{currentOrg.name}</span>
+          </button>
+        </div>
+      </>
+    )
+  }
 
   return (
     <div className="relative" data-org-switcher>
@@ -85,12 +119,12 @@ export function OrgSwitcher({ currentOrg, orgs, onCreateOrg, onEditOrg, openUp }
             {orgs.map(o => (
               <div
                 key={o.id}
-                className={`flex items-center gap-2 px-2 py-2 hover:bg-muted/50 transition-colors ${o.id === currentOrg.id ? "bg-muted/30" : ""}`}
+                className={`flex items-center gap-2 px-2 py-2 transition-colors ${o.id === currentOrg.id ? "bg-muted/50" : "hover:bg-muted/50"}`}
               >
                 <a
                   href={`/org/${o.slug}`}
                   className="flex items-center gap-2 flex-1 min-w-0"
-                  onClick={() => setOpen(false)}
+                  onClick={(e) => handleOrgClick(o, e)}
                 >
                   <div className={`w-5 h-5 flex items-center justify-center text-[10px] font-semibold text-white flex-shrink-0 ${getOrgColor(o.name)}`}>
                     {getOrgInitials(o.name)}
