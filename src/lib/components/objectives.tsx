@@ -31,13 +31,8 @@ import { useAppStore } from "@/lib/store"
 import { createClient } from "@/lib/supabase/client"
 import type { KeyResult, Objective, ObjectiveWithProgress, Organization } from "@/lib/types"
 
-// Colors for OKR lines
 const CHART_COLORS = ["var(--chart-1)", "var(--chart-2)", "var(--chart-3)", "var(--chart-4)", "var(--chart-5)"]
-
-// Tailwind fill classes for icons (must match CHART_COLORS order)
 const CHART_FILL_CLASSES = ["fill-chart-1", "fill-chart-2", "fill-chart-3", "fill-chart-4", "fill-chart-5"]
-
-// Icons for OKRs - clean geometric shapes, assigned by index (max 5 objectives)
 const OKR_ICONS = [Circle, Square, Diamond, Triangle, Hexagon] as const
 const MAX_OBJECTIVES = 5
 
@@ -54,7 +49,7 @@ interface Props {
   userOrgs?: OrgWithRole[]
 }
 
-async function fetchData(orgId: string) {
+async function fetchObjectives(orgId: string) {
   const supabase = createClient()
   const { data } = await supabase
     .from("objectives")
@@ -70,16 +65,12 @@ async function fetchData(orgId: string) {
         (a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
       ),
     }))
-    // Calculate progress for each KR (handles both increase and decrease metrics)
     const percentages = krs.map((k) => {
       if (k.target_value === 0) return 0
-      // If current <= target: normal progress (increase metric)
-      // If current > target: inverse progress (decrease metric, e.g., reduce response time)
       return k.current_value <= k.target_value
         ? Math.min((k.current_value / k.target_value) * 100, 100)
         : Math.min((k.target_value / k.current_value) * 100, 100)
     })
-    // Use median instead of average
     percentages.sort((a, b) => a - b)
     const mid = Math.floor(percentages.length / 2)
     const p =
@@ -92,8 +83,7 @@ async function fetchData(orgId: string) {
   })
 }
 
-// Theme button component
-function ThemeBtn({
+function ThemeButton({
   mobileOrg,
   mobileUserOrgs,
   mobileOpenOrgSettings,
@@ -109,13 +99,11 @@ function ThemeBtn({
   const { theme, setTheme } = useAppStore()
   const [open, setOpen] = useState(false)
 
-  // Initialize theme from store on mount
   useEffect(() => {
-    const t = theme
-    if (t === "system") {
+    if (theme === "system") {
       document.documentElement.classList.toggle("dark", window.matchMedia("(prefers-color-scheme: dark)").matches)
     } else {
-      document.documentElement.classList.toggle("dark", t === "dark")
+      document.documentElement.classList.toggle("dark", theme === "dark")
     }
   }, [theme])
 
@@ -125,9 +113,9 @@ function ThemeBtn({
   }
 
   const Icon = theme === "light" ? Sun : theme === "dark" ? Moon : Monitor
+
   return (
     <>
-      {/* Mobile top bar - OKR left, theme right */}
       <div className="md:hidden fixed top-3 left-3 z-40 select-none flex items-center gap-2">
         <Target className="h-4 w-4" />
         <span className="text-sm font-medium">OKR</span>
@@ -155,7 +143,6 @@ function ThemeBtn({
           )}
         </div>
       </div>
-      {/* Mobile footer */}
       <nav className="md:hidden fixed bottom-0 left-0 right-0 border-t border-border bg-background z-40 flex items-center justify-between px-4 h-12 select-none">
         {mobileOrg && mobileUserOrgs && (
           <OrgSwitcher
@@ -172,17 +159,11 @@ function ThemeBtn({
         )}
         <div className="flex items-center gap-3 text-xs text-muted-foreground">
           {mobileUserEmail && <span className="max-w-[100px] truncate">{mobileUserEmail}</span>}
-          <button
-            onClick={() => {
-              mobileSignOut?.()
-            }}
-            className="hover:text-foreground"
-          >
+          <button onClick={() => mobileSignOut?.()} className="hover:text-foreground">
             sign out
           </button>
         </div>
       </nav>
-      {/* Desktop theme + help buttons */}
       <div className="hidden md:flex fixed bottom-4 right-4 z-40 select-none gap-1">
         <button
           onClick={() => useAppStore.getState().openHelp()}
@@ -216,8 +197,7 @@ function ThemeBtn({
   )
 }
 
-// Dashboard charts component showing historical progress
-function DashboardCharts({
+function ProgressChart({
   objectives,
   hoveredObj,
   setHoveredObj,
@@ -228,22 +208,15 @@ function DashboardCharts({
 }) {
   const { chartPeriod: period, setChartPeriod: setPeriod } = useAppStore()
 
-  // Calculate period bounds - start from earliest objective, extend by period
   const getPeriodBounds = () => {
     const now = new Date()
     const todayOnly = new Date(now.getFullYear(), now.getMonth(), now.getDate())
-
-    // Find earliest objective creation date
     let earliestDate: Date = new Date(todayOnly)
     objectives.forEach((obj) => {
       const created = new Date(obj.created_at)
       created.setHours(0, 0, 0, 0)
-      if (created < earliestDate) {
-        earliestDate = created
-      }
+      if (created < earliestDate) earliestDate = created
     })
-
-    // Calculate end date based on period from earliest objective
     let periodEnd: Date
     switch (period) {
       case "1M":
@@ -259,37 +232,22 @@ function DashboardCharts({
         periodEnd.setFullYear(periodEnd.getFullYear() + 1)
         break
     }
-
-    // End date is the later of: period end or today
     const endDate = periodEnd > todayOnly ? periodEnd : todayOnly
-
     return { startDate: earliestDate, endDate, todayOnly }
   }
 
-  // Generate progress data for each objective over time
   const generateProgressData = () => {
     if (objectives.length === 0) return []
-
     const { startDate, endDate, todayOnly } = getPeriodBounds()
-
-    // Generate regular interval points based on period
     const points: Date[] = []
     const current = new Date(startDate)
-
-    // Determine interval based on period (daily granularity for smooth lines)
-    const intervalDays = 1
-
     while (current <= endDate) {
       points.push(new Date(current))
-      current.setDate(current.getDate() + intervalDays)
+      current.setDate(current.getDate() + 1)
     }
-
-    // Ensure end date (today) is included
     if (points[points.length - 1]?.getTime() !== endDate.getTime()) {
       points.push(new Date(endDate))
     }
-
-    // Also add key dates: objective creation dates and progress update dates
     objectives.forEach((obj) => {
       const created = new Date(obj.created_at)
       created.setHours(0, 0, 0, 0)
@@ -297,7 +255,6 @@ function DashboardCharts({
         const exists = points.some((p) => Math.abs(p.getTime() - created.getTime()) < 86400000)
         if (!exists) points.push(created)
       }
-
       obj.key_results.forEach((kr) => {
         const updates = (kr as any).progress_updates || []
         updates.forEach((u: any) => {
@@ -310,11 +267,8 @@ function DashboardCharts({
         })
       })
     })
-
-    // Sort all points chronologically
     points.sort((a, b) => a.getTime() - b.getTime())
 
-    // Helper to calculate progress at a given date
     const calculateProgressAtDate = (obj: ObjectiveWithProgress, targetDate: Date): number => {
       const krProgresses: number[] = []
       obj.key_results.forEach((kr) => {
@@ -347,59 +301,43 @@ function DashboardCharts({
       return krProgresses.length % 2 !== 0 ? krProgresses[mid] : (krProgresses[mid - 1] + krProgresses[mid]) / 2
     }
 
-    // Build data for each point
     return points.map((date) => {
       const entry: Record<string, number | string | null> = {
         date: date.toLocaleDateString("en-US", { month: "short", day: "numeric" }),
         _timestamp: date.getTime(),
       }
-
       objectives.forEach((obj, idx) => {
         const objCreated = new Date(obj.created_at)
         objCreated.setHours(0, 0, 0, 0)
         const dateOnly = new Date(date.getFullYear(), date.getMonth(), date.getDate())
-
         if (dateOnly > todayOnly) {
-          // Future date - don't show line
           entry[`obj${idx}`] = null
         } else if (dateOnly < objCreated) {
-          // Before objective was created - don't show line
           entry[`obj${idx}`] = null
         } else if (dateOnly.getTime() === objCreated.getTime()) {
-          // At objective start date - begin at 0%
           entry[`obj${idx}`] = 0
         } else if (objCreated < startDate && dateOnly.getTime() === startDate.getTime()) {
-          // Objective started before period - show progress at period start
           entry[`obj${idx}`] = calculateProgressAtDate(obj, startDate)
         } else {
-          // Calculate progress at this point
           entry[`obj${idx}`] = calculateProgressAtDate(obj, dateOnly)
         }
       })
-
       return entry
     })
   }
 
   const progressData = React.useMemo(() => generateProgressData(), [period, objectives])
 
-  // Colors for different objectives
-  const colors = CHART_COLORS
-
-  // Build chart config dynamically
-  const chartConfig: Record<string, { label: string; color?: string }> = {
-    date: { label: "Date" },
-  }
+  const chartConfig: Record<string, { label: string; color?: string }> = { date: { label: "Date" } }
   objectives.forEach((obj, idx) => {
     chartConfig[`obj${idx}`] = {
       label: obj.title.length > 20 ? `${obj.title.slice(0, 20)}...` : obj.title,
-      color: colors[idx % colors.length],
+      color: CHART_COLORS[idx % CHART_COLORS.length],
     }
   })
 
   return (
     <div className="mb-8">
-      {/* Status chart */}
       {objectives.length > 0 && (
         <div>
           <div className="flex items-center justify-between mb-4">
@@ -475,15 +413,12 @@ function DashboardCharts({
                 }}
               />
               {objectives.map((obj, idx) => {
-                const _isHovered = hoveredObj === obj.id
                 const isOtherHovered = hoveredObj !== null && hoveredObj !== obj.id
                 const IconComponent = OKR_ICONS[idx % OKR_ICONS.length]
-                const color = colors[idx % colors.length]
-                // Find first non-null data point index for this objective
+                const color = CHART_COLORS[idx % CHART_COLORS.length]
                 const startIdx = progressData.findIndex(
                   (d) => (d as any)[`obj${idx}`] !== null && (d as any)[`obj${idx}`] !== undefined
                 )
-                // Find last non-null data point index (today or last data point)
                 const endIdx = progressData.reduce((last, d, i) => ((d as any)[`obj${idx}`] !== null ? i : last), -1)
                 return (
                   <Line
@@ -498,7 +433,6 @@ function DashboardCharts({
                     dot={(props: any) => {
                       const opacity = isOtherHovered ? 0.2 : 1
                       const size = 8
-                      // Show icon at start point (always visible)
                       if (props.index === startIdx && props.cx && props.cy) {
                         return (
                           <foreignObject
@@ -516,7 +450,6 @@ function DashboardCharts({
                           </foreignObject>
                         )
                       }
-                      // Show dot at end point (always visible)
                       if (props.index === endIdx && props.cx && props.cy) {
                         return (
                           <circle
@@ -548,7 +481,6 @@ function DashboardCharts({
   )
 }
 
-// Objective Modal component
 function ObjectiveModal({
   onClose,
   onDone,
@@ -582,30 +514,24 @@ function ObjectiveModal({
       startValue: kr.current_value,
     })) || []
   )
-  const [_evaluation, setEvaluation] = useState<string | null>(null)
   const [validationHints, setValidationHints] = useState<
     { field: "title" | "description"; issue: string; hint: string }[]
   >([])
-
   const date = new Date()
   date.setMonth(date.getMonth() + 3)
   const [endDate, setEndDate] = useState(editingObjective?.end_date || date.toISOString().split("T")[0])
-
   const isEditing = !!editingObjective
 
   function addKr() {
     setKeyResults([...keyResults, { id: crypto.randomUUID(), title: "", targetValue: 100, unit: "%", startValue: 0 }])
-    setEvaluation(null)
   }
 
   function updateKr(id: string, field: string, value: string | number) {
     setKeyResults(keyResults.map((kr) => (kr.id === id ? { ...kr, [field]: value } : kr)))
-    setEvaluation(null)
   }
 
   function removeKr(id: string) {
     setKeyResults(keyResults.filter((kr) => kr.id !== id))
-    setEvaluation(null)
   }
 
   async function generateWithAI() {
@@ -613,7 +539,6 @@ function ObjectiveModal({
     setGenerating(true)
     setValidationHints([])
     try {
-      // First validate the objective
       const validateRes = await fetch("/api/ai", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -621,42 +546,34 @@ function ObjectiveModal({
       })
       const validateData = await validateRes.json()
       if (validateData.error) {
-        console.error("Failed to validate objective:", validateData.error)
         setGenerating(false)
         return
       }
-
-      // If validation failed, show hints and don't generate
       if (!validateData.isValid && validateData.issues?.length > 0) {
         setValidationHints(validateData.issues)
         setGenerating(false)
         return
       }
-
-      // Validation passed, proceed to generate
       const res = await fetch("/api/ai", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ action: "generateKeyResults", data: { title, description } }),
       })
       const data = await res.json()
-      if (data.error) {
-        console.error("Failed to generate key results:", data.error)
-        return
-      }
+      if (data.error) return
       const generated = data.keyResults || []
       if (generated.length === 0) return
-      const krs = generated.map((kr: { title: string; targetValue: number; unit: string; startValue: number }) => ({
-        id: crypto.randomUUID(),
-        title: kr.title,
-        targetValue: kr.targetValue,
-        unit: kr.unit,
-        startValue: kr.startValue,
-      }))
-      setKeyResults(krs)
-      setValidationHints([]) // Clear hints on success
-    } catch (e) {
-      console.error("Failed to generate key results", e)
+      setKeyResults(
+        generated.map((kr: { title: string; targetValue: number; unit: string; startValue: number }) => ({
+          id: crypto.randomUUID(),
+          title: kr.title,
+          targetValue: kr.targetValue,
+          unit: kr.unit,
+          startValue: kr.startValue,
+        }))
+      )
+      setValidationHints([])
+    } catch {
     } finally {
       setGenerating(false)
     }
@@ -666,11 +583,9 @@ function ObjectiveModal({
     e.preventDefault()
     if (!title.trim() || !description.trim()) return
     setLoading(true)
-
     if (devMode) {
       if (isEditing && editingObjective && onDevUpdate) {
-        // Dev mode: update existing objective
-        const updatedObjective: Objective = {
+        onDevUpdate({
           ...editingObjective,
           title,
           description,
@@ -688,13 +603,11 @@ function ObjectiveModal({
               created_at: new Date().toISOString(),
               updated_at: new Date().toISOString(),
             })),
-        }
-        onDevUpdate(updatedObjective)
+        })
         onDone()
         return
       } else if (onDevCreate) {
-        // Dev mode: create local objective
-        const newObjective: Objective = {
+        onDevCreate({
           id: crypto.randomUUID(),
           user_id: "dev",
           org_id: null,
@@ -718,13 +631,11 @@ function ObjectiveModal({
               updated_at: new Date().toISOString(),
             })),
           overall_progress: 0,
-        }
-        onDevCreate(newObjective)
+        })
         onDone()
         return
       }
     }
-
     if (isEditing && editingObjective) {
       const { updateObjectiveWithKeyResults } = await import("@/lib/actions")
       await updateObjectiveWithKeyResults(
@@ -822,7 +733,6 @@ function ObjectiveModal({
           className="w-full h-10 border border-border bg-transparent px-3 text-sm focus:border-foreground focus:outline-none"
         />
       </div>
-
       <div className="border-t border-border pt-4">
         <div className="flex items-center justify-between mb-3">
           <label className="text-xs text-muted-foreground">Key Results</label>
@@ -845,7 +755,6 @@ function ObjectiveModal({
             </button>
           </div>
         </div>
-
         {keyResults.length > 0 && (
           <ScrollArea className="h-[240px]">
             <div className="space-y-2 pr-3">
@@ -935,7 +844,6 @@ function ObjectiveModal({
     </div>
   )
 
-  // Mobile: Drawer from bottom
   if (isMobile) {
     return (
       <Drawer open onOpenChange={(open) => !open && onClose()}>
@@ -952,7 +860,6 @@ function ObjectiveModal({
     )
   }
 
-  // Desktop: Centered dialog
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4" onClick={onClose}>
       <form
@@ -978,8 +885,6 @@ function ObjectiveModal({
   )
 }
 
-// Key Result Modal
-// Report Progress Modal
 function ReportModal({
   objective,
   onClose,
@@ -1006,15 +911,10 @@ function ReportModal({
     e.preventDefault()
     setLoading(true)
     setError(null)
-
     if (devMode && onDevUpdate) {
-      // Dev mode: update local state
-      const updatedObj: Objective = {
+      onDevUpdate({
         ...objective,
-        key_results: objective.key_results.map((kr) => ({
-          ...kr,
-          current_value: values[kr.id] ?? kr.current_value,
-        })),
+        key_results: objective.key_results.map((kr) => ({ ...kr, current_value: values[kr.id] ?? kr.current_value })),
         overall_progress: (() => {
           const pcts = objective.key_results.map((kr) => {
             const newVal = values[kr.id] ?? kr.current_value
@@ -1027,20 +927,15 @@ function ReportModal({
           const m = Math.floor(pcts.length / 2)
           return pcts.length === 0 ? 0 : pcts.length % 2 !== 0 ? pcts[m] : (pcts[m - 1] + pcts[m]) / 2
         })(),
-      }
-      onDevUpdate(updatedObj)
+      })
       onDone()
       return
     }
-
     try {
       const { updateKeyResultProgress } = await import("@/lib/actions")
       let updatedCount = 0
       for (const kr of objective.key_results) {
         const newValue = values[kr.id]
-        console.log(
-          `KR "${kr.title}": current=${kr.current_value}, new=${newValue}, changed=${newValue !== kr.current_value}`
-        )
         if (newValue !== kr.current_value) {
           updatedCount++
           const result = await updateKeyResultProgress(kr.id, newValue, orgId, note || undefined)
@@ -1051,7 +946,6 @@ function ReportModal({
           }
         }
       }
-      console.log(`Updated ${updatedCount} key results`)
       if (updatedCount === 0) {
         setError("No values were changed. Update at least one value to save progress.")
         setLoading(false)
@@ -1129,7 +1023,6 @@ function ReportModal({
   )
 }
 
-// Help modal with keyboard shortcuts
 function HelpModal({ onClose }: { onClose: () => void }) {
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50" onClick={onClose}>
@@ -1147,15 +1040,15 @@ function HelpModal({ onClose }: { onClose: () => void }) {
             <div className="space-y-1">
               <div className="flex justify-between">
                 <span>New objective</span>
-                <kbd className="px-1.5 py-0.5 bg-muted font-mono">{"⌘N"}</kbd>
+                <kbd className="px-1.5 py-0.5 bg-muted font-mono">⌘N</kbd>
               </div>
               <div className="flex justify-between">
                 <span>Settings</span>
-                <kbd className="px-1.5 py-0.5 bg-muted font-mono">{"⌘,"}</kbd>
+                <kbd className="px-1.5 py-0.5 bg-muted font-mono">⌘,</kbd>
               </div>
               <div className="flex justify-between">
                 <span>Cycle theme</span>
-                <kbd className="px-1.5 py-0.5 bg-muted font-mono">{"⌘."}</kbd>
+                <kbd className="px-1.5 py-0.5 bg-muted font-mono">⌘.</kbd>
               </div>
               <div className="flex justify-between">
                 <span>Close/Cancel</span>
@@ -1239,24 +1132,14 @@ function HelpModal({ onClose }: { onClose: () => void }) {
   )
 }
 
-// History Modal - shows all progress updates for an objective
 function HistoryModal({ objective, onClose }: { objective: Objective; onClose: () => void }) {
   const isMobile = useIsMobile()
-
-  // Flatten all progress updates with KR info, sorted by newest first
   const sortedUpdates = objective.key_results
-    .flatMap((kr) =>
-      (kr.progress_updates || []).map((u) => ({
-        ...u,
-        krTitle: kr.title,
-        unit: kr.unit,
-      }))
-    )
+    .flatMap((kr) => (kr.progress_updates || []).map((u) => ({ ...u, krTitle: kr.title, unit: kr.unit })))
     .sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime())
 
   const content = (
     <div className="flex flex-col h-full">
-      {/* Header */}
       <div className="flex justify-between items-center mb-3 select-none flex-shrink-0">
         <span className="font-medium text-sm">Progress History</span>
         {!isMobile && (
@@ -1269,24 +1152,19 @@ function HistoryModal({ objective, onClose }: { objective: Objective; onClose: (
           </button>
         )}
       </div>
-
-      {/* History timeline */}
       <ScrollArea className="flex-1 min-h-0">
         {sortedUpdates.length === 0 ? (
           <div className="text-center py-8 text-sm text-muted-foreground">No progress updates yet</div>
         ) : (
           <div className="relative pr-3">
-            {/* Timeline line */}
             <div className="absolute left-[5px] top-2 bottom-2 w-px bg-border" />
             <div className="space-y-4">
               {sortedUpdates.map((u) => {
                 const delta = u.new_value - u.previous_value
                 const deltaColor = delta > 0 ? "text-green-500" : delta < 0 ? "text-red-500" : "text-muted-foreground"
                 const deltaText = delta > 0 ? `+${delta}` : delta.toString()
-
                 return (
                   <div key={u.id} className="relative pl-6">
-                    {/* Timeline dot */}
                     <div className="absolute left-0 top-1 w-[11px] h-[11px] rounded-full border-2 border-border bg-background" />
                     <div className="flex flex-col gap-0.5">
                       <div className="flex items-center gap-2">
@@ -1314,7 +1192,6 @@ function HistoryModal({ objective, onClose }: { objective: Objective; onClose: (
     </div>
   )
 
-  // Mobile: Drawer
   if (isMobile) {
     return (
       <Drawer open onOpenChange={(open) => !open && onClose()}>
@@ -1328,7 +1205,6 @@ function HistoryModal({ objective, onClose }: { objective: Objective; onClose: (
     )
   }
 
-  // Desktop: Centered dialog
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4" onClick={onClose}>
       <div
@@ -1341,8 +1217,7 @@ function HistoryModal({ objective, onClose }: { objective: Objective; onClose: (
   )
 }
 
-export function Dashboard({ user, org, orgRole, devMode, needsOrgName, userOrgs = [] }: Props) {
-  // Zustand store
+export function Objectives({ user, org, orgRole, devMode, needsOrgName, userOrgs = [] }: Props) {
   const {
     showObjectiveModal,
     showReportModal,
@@ -1384,25 +1259,18 @@ export function Dashboard({ user, org, orgRole, devMode, needsOrgName, userOrgs 
   } = useAppStore()
 
   const [devObjectives, setDevObjectives] = useState<Objective[]>([])
-  const { data: dbObjectives = [], mutate } = useSWR(devMode ? null : `objectives-${org.id}`, () => fetchData(org.id))
+  const { data: dbObjectives = [], mutate } = useSWR(devMode ? null : `objectives-${org.id}`, () =>
+    fetchObjectives(org.id)
+  )
   const supabase = createClient()
   const isAdmin = orgRole === "owner" || orgRole === "admin"
 
-  // Sync fetched objectives to store
   useEffect(() => {
-    if (!devMode && dbObjectives.length > 0) {
-      setObjectives(dbObjectives)
-    }
+    if (!devMode && dbObjectives.length > 0) setObjectives(dbObjectives)
   }, [dbObjectives, devMode, setObjectives])
 
   const objectives = devMode ? devObjectives : storeObjectives.length > 0 ? storeObjectives : dbObjectives
 
-  // Dev mode: custom mutate function to update local state
-  const _devMutate = useCallback((newObjectives?: Objective[]) => {
-    if (newObjectives) setDevObjectives(newObjectives)
-  }, [])
-
-  // Fetch org members and invites when org settings is opened (skip in dev mode)
   useEffect(() => {
     if (showOrgSettings && org && !devMode) {
       Promise.all([
@@ -1432,11 +1300,9 @@ export function Dashboard({ user, org, orgRole, devMode, needsOrgName, userOrgs 
 
   const onKey = useCallback(
     (e: KeyboardEvent) => {
-      // Skip if typing in input/textarea
       const tag = (e.target as HTMLElement)?.tagName
       const isInput = tag === "INPUT" || tag === "TEXTAREA" || tag === "SELECT"
 
-      // Global shortcuts (work even in inputs)
       if (e.key === "Escape") {
         e.preventDefault()
         if (showHistoryModal) {
@@ -1467,7 +1333,6 @@ export function Dashboard({ user, org, orgRole, devMode, needsOrgName, userOrgs 
         return
       }
 
-      // Cmd shortcuts
       if (e.metaKey || e.ctrlKey) {
         if (e.key === "n") {
           e.preventDefault()
@@ -1484,17 +1349,13 @@ export function Dashboard({ user, org, orgRole, devMode, needsOrgName, userOrgs 
         return
       }
 
-      // Skip rest if in input or modal open
       if (isInput || showObjectiveModal || showReportModal || showOrgSettings || showHelp || showHistoryModal) return
 
-      // Help
       if (e.key === "?" || (e.shiftKey && e.key === "/")) {
         e.preventDefault()
         openHelp()
         return
       }
-
-      // Chart period shortcuts
       if (e.key === "m" || e.key === "M") {
         e.preventDefault()
         setChartPeriod("1M")
@@ -1510,15 +1371,11 @@ export function Dashboard({ user, org, orgRole, devMode, needsOrgName, userOrgs 
         setChartPeriod("Y")
         return
       }
-
-      // Number keys to select objective (1-5)
       if (e.key >= "1" && e.key <= "5") {
         e.preventDefault()
         selectByNumber(parseInt(e.key, 10))
         return
       }
-
-      // J/K navigation
       if (e.key === "j" || e.key === "ArrowDown") {
         e.preventDefault()
         selectNext()
@@ -1530,39 +1387,28 @@ export function Dashboard({ user, org, orgRole, devMode, needsOrgName, userOrgs 
         return
       }
 
-      // Actions on selected objective
       if (selectedIdx >= 0 && selectedIdx < objectives.length) {
         const obj = objectives[selectedIdx]
-
-        // Enter/Space/X - toggle expand
         if (e.key === "Enter" || e.key === " " || e.key === "x" || e.key === "X") {
           e.preventDefault()
           toggleExpanded(obj.id)
           return
         }
-
-        // R - report progress
         if (e.key === "r" || e.key === "R") {
           e.preventDefault()
           openReportModal(obj)
           return
         }
-
-        // H - view history
         if (e.key === "h" || e.key === "H") {
           e.preventDefault()
           openHistoryModal(obj)
           return
         }
-
-        // E - edit (admin only)
         if ((e.key === "e" || e.key === "E") && isAdmin) {
           e.preventDefault()
           openObjectiveModal(obj)
           return
         }
-
-        // D/Delete/Backspace - delete (admin only)
         if ((e.key === "d" || e.key === "D" || e.key === "Delete" || e.key === "Backspace") && isAdmin) {
           e.preventDefault()
           if (confirm(`Delete "${obj.title}"?`)) deleteObj(obj.id)
@@ -1570,7 +1416,6 @@ export function Dashboard({ user, org, orgRole, devMode, needsOrgName, userOrgs 
         }
       }
 
-      // O - open settings
       if (e.key === "o" || e.key === "O") {
         e.preventDefault()
         openOrgSettings()
@@ -1617,7 +1462,6 @@ export function Dashboard({ user, org, orgRole, devMode, needsOrgName, userOrgs 
 
   return (
     <div className="h-screen flex flex-col bg-background text-foreground overflow-hidden">
-      {/* Desktop header */}
       <header className="hidden md:block border-b border-border flex-shrink-0 select-none">
         <div className="mx-auto flex h-12 max-w-3xl lg:max-w-5xl xl:max-w-6xl items-center justify-between px-6 text-sm">
           <span className="flex items-center gap-2 font-medium">
@@ -1649,8 +1493,7 @@ export function Dashboard({ user, org, orgRole, devMode, needsOrgName, userOrgs 
         </div>
       </header>
 
-      {/* Theme button (mobile footer + desktop bottom-right) */}
-      <ThemeBtn
+      <ThemeButton
         mobileOrg={org}
         mobileUserOrgs={userOrgs}
         mobileOpenOrgSettings={openOrgSettings}
@@ -1662,11 +1505,8 @@ export function Dashboard({ user, org, orgRole, devMode, needsOrgName, userOrgs 
       />
 
       <main className="flex-1 flex flex-col overflow-hidden pb-[104px] md:pb-0">
-        {/* Charts - fixed */}
         <div className="mx-auto w-full max-w-3xl lg:max-w-5xl xl:max-w-6xl px-6 pt-8 flex-shrink-0">
-          <DashboardCharts objectives={objectives} hoveredObj={hoveredObjId} setHoveredObj={setHoveredObjId} />
-
-          {/* Desktop: Objectives header inline */}
+          <ProgressChart objectives={objectives} hoveredObj={hoveredObjId} setHoveredObj={setHoveredObjId} />
           <div className="hidden md:flex items-center justify-between mb-4 select-none">
             <h2 className="text-sm font-medium">Objectives</h2>
             <button
@@ -1676,12 +1516,11 @@ export function Dashboard({ user, org, orgRole, devMode, needsOrgName, userOrgs 
               title={!canAddObjective ? `Maximum ${MAX_OBJECTIVES} objectives reached` : undefined}
             >
               <Plus className="h-3.5 w-3.5" /> New{" "}
-              <kbd className="ml-1 px-1.5 py-0.5 bg-muted font-mono text-[10px]">{"⌘N"}</kbd>
+              <kbd className="ml-1 px-1.5 py-0.5 bg-muted font-mono text-[10px]">⌘N</kbd>
             </button>
           </div>
         </div>
 
-        {/* Objectives - scrollable */}
         <div className="flex-1 overflow-y-auto mx-auto w-full max-w-3xl lg:max-w-5xl xl:max-w-6xl px-6 pb-6">
           {objectives.length === 0 ? (
             <div className="h-full flex items-center justify-center">
@@ -1690,10 +1529,8 @@ export function Dashboard({ user, org, orgRole, devMode, needsOrgName, userOrgs 
           ) : (
             <div>
               {objectives.map((obj, i) => {
-                const _isHovered = hoveredObjId === obj.id
                 const isOtherHovered = hoveredObjId !== null && hoveredObjId !== obj.id
                 const isSelected = selectedIdx === i
-
                 return (
                   <div
                     key={obj.id}
@@ -1849,7 +1686,6 @@ export function Dashboard({ user, org, orgRole, devMode, needsOrgName, userOrgs 
         </div>
       </main>
 
-      {/* Mobile: Objectives header bar fixed at bottom above footer */}
       <div className="md:hidden fixed bottom-16 left-0 right-0 bg-background z-30 flex items-center justify-between px-4 h-10 select-none">
         <h2 className="text-sm font-medium">Objectives</h2>
         <button
