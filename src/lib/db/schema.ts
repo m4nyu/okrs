@@ -1,15 +1,5 @@
-import {
-  pgTable,
-  uuid,
-  text,
-  date,
-  timestamp,
-  boolean,
-  numeric,
-  unique,
-  index,
-} from "drizzle-orm/pg-core";
-import { relations } from "drizzle-orm";
+import { relations } from "drizzle-orm"
+import { boolean, date, index, numeric, pgTable, text, timestamp, unique, uuid } from "drizzle-orm/pg-core"
 
 // Objectives table
 export const objectives = pgTable(
@@ -35,7 +25,7 @@ export const objectives = pgTable(
     index("idx_objectives_share_token").on(table.shareToken),
     index("idx_objectives_org_id").on(table.orgId),
   ]
-);
+)
 
 // Key Results table
 export const keyResults = pgTable(
@@ -53,7 +43,7 @@ export const keyResults = pgTable(
     updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow(),
   },
   (table) => [index("idx_key_results_objective_id").on(table.objectiveId)]
-);
+)
 
 // Progress Updates table
 export const progressUpdates = pgTable(
@@ -69,7 +59,7 @@ export const progressUpdates = pgTable(
     createdAt: timestamp("created_at", { withTimezone: true }).defaultNow(),
   },
   (table) => [index("idx_progress_updates_key_result_id").on(table.keyResultId)]
-);
+)
 
 // Organizations table
 export const organizations = pgTable(
@@ -85,7 +75,7 @@ export const organizations = pgTable(
     updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow(),
   },
   (table) => [index("idx_organizations_domain").on(table.domain)]
-);
+)
 
 // Organization Members table
 export const orgMembers = pgTable(
@@ -106,7 +96,7 @@ export const orgMembers = pgTable(
     index("idx_org_members_org_id").on(table.orgId),
     index("idx_org_members_user_id").on(table.userId),
   ]
-);
+)
 
 // Organization Invites table
 export const orgInvites = pgTable(
@@ -131,7 +121,7 @@ export const orgInvites = pgTable(
     index("idx_org_invites_email").on(table.email),
     index("idx_org_invites_token").on(table.token),
   ]
-);
+)
 
 // Relations
 export const objectivesRelations = relations(objectives, ({ one, many }) => ({
@@ -140,7 +130,7 @@ export const objectivesRelations = relations(objectives, ({ one, many }) => ({
     references: [organizations.id],
   }),
   keyResults: many(keyResults),
-}));
+}))
 
 export const keyResultsRelations = relations(keyResults, ({ one, many }) => ({
   objective: one(objectives, {
@@ -148,31 +138,31 @@ export const keyResultsRelations = relations(keyResults, ({ one, many }) => ({
     references: [objectives.id],
   }),
   progressUpdates: many(progressUpdates),
-}));
+}))
 
 export const progressUpdatesRelations = relations(progressUpdates, ({ one }) => ({
   keyResult: one(keyResults, {
     fields: [progressUpdates.keyResultId],
     references: [keyResults.id],
   }),
-}));
+}))
 
 export const organizationsRelations = relations(organizations, ({ many }) => ({
   members: many(orgMembers),
   invites: many(orgInvites),
   objectives: many(objectives),
-}));
+}))
 
 export const orgMembersRelations = relations(orgMembers, ({ one }) => ({
   organization: one(organizations, {
     fields: [orgMembers.orgId],
     references: [organizations.id],
   }),
-}));
+}))
 
 export const orgInvitesRelations = relations(orgInvites, ({ one }) => ({
   organization: one(organizations, {
     fields: [orgInvites.orgId],
     references: [organizations.id],
   }),
-}));
+}))

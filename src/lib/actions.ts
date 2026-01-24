@@ -1,54 +1,24 @@
 "use server"
 
-import { createClient } from "@/lib/supabase/server"
 import { revalidatePath } from "next/cache"
-import type { Objective, KeyResult } from "@/lib/types"
+import { createClient } from "@/lib/supabase/server"
 
-export async function createObjective(formData: FormData) {
-  const supabase = await createClient()
-  const { data: { user } } = await supabase.auth.getUser()
-  
-  if (!user) {
-    return { error: "Not authenticated" }
-  }
-
-  const title = formData.get("title") as string
-  const description = formData.get("description") as string
-  const endDate = formData.get("end_date") as string
-
-  const { data, error } = await supabase
-    .from("objectives")
-    .insert({
-      user_id: user.id,
-      title,
-      description,
-      end_date: endDate,
-    })
-    .select()
-    .single()
-
-  if (error) {
-    return { error: error.message }
-  }
-
-  revalidatePath("/", "max")
-  return { data }
-}
-
-export async function createObjectiveWithKeyResults(payload: unknown) {
+export async function createObjectiveWithKeyResults(payload: unknown, orgId: string) {
   const { createObjectiveSchema } = await import("@/lib/types")
-  
+
   // Validate with Zod
   const parsed = createObjectiveSchema.safeParse(payload)
   if (!parsed.success) {
-    return { error: parsed.error.errors.map(e => e.message).join(", ") }
+    return { error: parsed.error.errors.map((e) => e.message).join(", ") }
   }
-  
+
   const { title, description, endDate, keyResults } = parsed.data
-  
+
   const supabase = await createClient()
-  const { data: { user } } = await supabase.auth.getUser()
-  
+  const {
+    data: { user },
+  } = await supabase.auth.getUser()
+
   if (!user) {
     return { error: "Not authenticated" }
   }
@@ -58,6 +28,7 @@ export async function createObjectiveWithKeyResults(payload: unknown) {
     .from("objectives")
     .insert({
       user_id: user.id,
+      org_id: orgId,
       title,
       description: description || null,
       end_date: endDate,
@@ -71,7 +42,7 @@ export async function createObjectiveWithKeyResults(payload: unknown) {
 
   // Create key results
   if (keyResults.length > 0) {
-    const krsToInsert = keyResults.map(kr => ({
+    const krsToInsert = keyResults.map((kr) => ({
       objective_id: objective.id,
       title: kr.title,
       target_value: kr.targetValue,
@@ -79,10 +50,7 @@ export async function createObjectiveWithKeyResults(payload: unknown) {
       unit: kr.unit,
     }))
 
-    const { data: createdKrs, error: krError } = await supabase
-      .from("key_results")
-      .insert(krsToInsert)
-      .select()
+    const { data: createdKrs, error: krError } = await supabase.from("key_results").insert(krsToInsert).select()
 
     if (krError) {
       return { error: krError.message }
@@ -109,23 +77,40 @@ export async function createObjectiveWithKeyResults(payload: unknown) {
   return { data: objective }
 }
 
-export async function updateObjectiveWithKeyResults(payload: {
-  id: string;
-  title: string;
-  description: string;
-  endDate: string;
-  keyResults: { id: string; title: string; targetValue: number; unit: string; startValue: number }[];
-}) {
+export async function updateObjectiveWithKeyResults(
+  payload: {
+    id: string
+    title: string
+    description: string
+    endDate: string
+    keyResults: { id: string; title: string; targetValue: number; unit: string; startValue: number }[]
+  },
+  orgId: string
+) {
   const supabase = await createClient()
-  const { data: { user } } = await supabase.auth.getUser()
-  
+  const {
+    data: { user },
+  } = await supabase.auth.getUser()
+
   if (!user) {
     return { error: "Not authenticated" }
   }
 
+  // Verify user is member of the org
+  const { data: membership } = await supabase
+    .from("org_members")
+    .select("role")
+    .eq("org_id", orgId)
+    .eq("user_id", user.id)
+    .single()
+
+  if (!membership) {
+    return { error: "Not authorized for this organization" }
+  }
+
   const { id, title, description, endDate, keyResults } = payload
 
-  // Update objective
+  // Update objective - only if it belongs to this org
   const { error: objError } = await supabase
     .from("objectives")
     .update({
@@ -135,6 +120,7 @@ export async function updateObjectiveWithKeyResults(payload: {
       updated_at: new Date().toISOString(),
     })
     .eq("id", id)
+    .eq("org_id", orgId)
 
   if (objError) {
     return { error: objError.message }
@@ -142,9 +128,9 @@ export async function updateObjectiveWithKeyResults(payload: {
 
   // Update key results - delete existing and insert new ones
   await supabase.from("key_results").delete().eq("objective_id", id)
-  
+
   if (keyResults.length > 0) {
-    const krsToInsert = keyResults.map(kr => ({
+    const krsToInsert = keyResults.map((kr) => ({
       objective_id: id,
       title: kr.title,
       target_value: kr.targetValue,
@@ -152,9 +138,7 @@ export async function updateObjectiveWithKeyResults(payload: {
       unit: kr.unit,
     }))
 
-    const { error: krError } = await supabase
-      .from("key_results")
-      .insert(krsToInsert)
+    const { error: krError } = await supabase.from("key_results").insert(krsToInsert)
 
     if (krError) {
       return { error: krError.message }
@@ -165,50 +149,32 @@ export async function updateObjectiveWithKeyResults(payload: {
   return { success: true }
 }
 
-export async function createKeyResult(formData: FormData) {
+export async function updateKeyResultProgress(keyResultId: string, newValue: number, orgId: string, note?: string) {
   const supabase = await createClient()
-  const { data: { user } } = await supabase.auth.getUser()
-  
+  const {
+    data: { user },
+  } = await supabase.auth.getUser()
+
   if (!user) {
     return { error: "Not authenticated" }
   }
 
-  const objectiveId = formData.get("objective_id") as string
-  const title = formData.get("title") as string
-  const targetValue = parseFloat(formData.get("target_value") as string)
-  const unit = formData.get("unit") as string || "%"
-
-  const { data, error } = await supabase
-    .from("key_results")
-    .insert({
-      objective_id: objectiveId,
-      title,
-      target_value: targetValue,
-      unit,
-    })
-    .select()
+  // Verify user is member of the org
+  const { data: membership } = await supabase
+    .from("org_members")
+    .select("role")
+    .eq("org_id", orgId)
+    .eq("user_id", user.id)
     .single()
 
-  if (error) {
-    return { error: error.message }
+  if (!membership) {
+    return { error: "Not authorized for this organization" }
   }
 
-  revalidatePath("/", "max")
-  return { data }
-}
-
-export async function updateKeyResultProgress(keyResultId: string, newValue: number, note?: string) {
-  const supabase = await createClient()
-  const { data: { user } } = await supabase.auth.getUser()
-
-  if (!user) {
-    return { error: "Not authenticated" }
-  }
-
-  // Get current value first
+  // Get key result and verify it belongs to an objective in this org
   const { data: keyResult, error: fetchError } = await supabase
     .from("key_results")
-    .select("current_value")
+    .select("current_value, objectives!inner(org_id)")
     .eq("id", keyResultId)
     .single()
 
@@ -221,15 +187,23 @@ export async function updateKeyResultProgress(keyResultId: string, newValue: num
     return { error: "Key result not found" }
   }
 
+  // Verify the key result's objective belongs to this org
+  if ((keyResult as any).objectives?.org_id !== orgId) {
+    return { error: "Key result not found in this organization" }
+  }
+
   console.log("Creating progress update:", { keyResultId, previous: keyResult.current_value, new: newValue, note })
 
   // Create progress update
-  const { data: progressData, error: progressError } = await supabase.from("progress_updates").insert({
-    key_result_id: keyResultId,
-    previous_value: keyResult.current_value,
-    new_value: newValue,
-    note: note || null,
-  }).select()
+  const { data: progressData, error: progressError } = await supabase
+    .from("progress_updates")
+    .insert({
+      key_result_id: keyResultId,
+      previous_value: keyResult.current_value,
+      new_value: newValue,
+      note: note || null,
+    })
+    .select()
 
   if (progressError) {
     console.error("Failed to create progress update:", progressError)
@@ -253,99 +227,68 @@ export async function updateKeyResultProgress(keyResultId: string, newValue: num
   return { success: true }
 }
 
-export async function toggleObjectivePublic(objectiveId: string, isPublic: boolean) {
+export async function deleteObjective(objectiveId: string, orgId: string) {
   const supabase = await createClient()
-  const { data: { user } } = await supabase.auth.getUser()
-  
+  const {
+    data: { user },
+  } = await supabase.auth.getUser()
+
   if (!user) {
     return { error: "Not authenticated" }
   }
 
-  const { error } = await supabase
-    .from("objectives")
-    .update({ is_public: isPublic })
-    .eq("id", objectiveId)
-    .eq("user_id", user.id)
-
-  if (error) {
-    return { error: error.message }
-  }
-
-  revalidatePath("/", "max")
-  return { success: true }
-}
-
-export async function deleteObjective(objectiveId: string) {
-  const supabase = await createClient()
-  const { data: { user } } = await supabase.auth.getUser()
-  
-  if (!user) {
-    return { error: "Not authenticated" }
-  }
-
-  const { error } = await supabase
-    .from("objectives")
-    .delete()
-    .eq("id", objectiveId)
-    .eq("user_id", user.id)
-
-  if (error) {
-    return { error: error.message }
-  }
-
-  revalidatePath("/", "max")
-  return { success: true }
-}
-
-export async function updateObjectiveStatus(objectiveId: string, status: string) {
-  const supabase = await createClient()
-  const { data: { user } } = await supabase.auth.getUser()
-  
-  if (!user) {
-    return { error: "Not authenticated" }
-  }
-
-  const { error } = await supabase
-    .from("objectives")
-    .update({ status })
-    .eq("id", objectiveId)
-    .eq("user_id", user.id)
-
-  if (error) {
-    return { error: error.message }
-  }
-
-  revalidatePath("/", "max")
-  return { success: true }
-}
-
-// Organization actions
-export async function getUserOrg() {
-  const supabase = await createClient()
-  const { data: { user } } = await supabase.auth.getUser()
-  
-  if (!user) return null
-
+  // Verify user is member of the org with admin/owner role
   const { data: membership } = await supabase
     .from("org_members")
-    .select("org_id, role, organizations(*)")
+    .select("role")
+    .eq("org_id", orgId)
     .eq("user_id", user.id)
     .single()
 
-  return membership
+  if (!membership || (membership.role !== "owner" && membership.role !== "admin")) {
+    return { error: "Only owners and admins can delete objectives" }
+  }
+
+  // Delete objective only if it belongs to this org
+  const { error } = await supabase.from("objectives").delete().eq("id", objectiveId).eq("org_id", orgId)
+
+  if (error) {
+    return { error: error.message }
+  }
+
+  revalidatePath("/", "max")
+  return { success: true }
 }
 
 // Common email providers that shouldn't be used for domain auto-join
 const PUBLIC_EMAIL_DOMAINS = [
-  "gmail.com", "googlemail.com", "yahoo.com", "yahoo.co.uk", "hotmail.com",
-  "hotmail.co.uk", "outlook.com", "live.com", "msn.com", "aol.com",
-  "icloud.com", "me.com", "mac.com", "protonmail.com", "proton.me",
-  "zoho.com", "yandex.com", "mail.com", "gmx.com", "gmx.net"
+  "gmail.com",
+  "googlemail.com",
+  "yahoo.com",
+  "yahoo.co.uk",
+  "hotmail.com",
+  "hotmail.co.uk",
+  "outlook.com",
+  "live.com",
+  "msn.com",
+  "aol.com",
+  "icloud.com",
+  "me.com",
+  "mac.com",
+  "protonmail.com",
+  "proton.me",
+  "zoho.com",
+  "yandex.com",
+  "mail.com",
+  "gmx.com",
+  "gmx.net",
 ]
 
 export async function createOrganization(name: string) {
   const supabase = await createClient()
-  const { data: { user } } = await supabase.auth.getUser()
+  const {
+    data: { user },
+  } = await supabase.auth.getUser()
 
   if (!user?.email) {
     return { error: "Not authenticated" }
@@ -354,7 +297,10 @@ export async function createOrganization(name: string) {
   const emailDomain = user.email.split("@")[1].toLowerCase()
   // Don't auto-set domain for public email providers
   const domain = PUBLIC_EMAIL_DOMAINS.includes(emailDomain) ? null : emailDomain
-  const slug = name.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/(^-|-$)/g, "")
+  const slug = name
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/(^-|-$)/g, "")
 
   // Use admin client to bypass RLS for org creation
   const { createAdminClient } = await import("@/lib/supabase/server")
@@ -366,7 +312,7 @@ export async function createOrganization(name: string) {
       name,
       slug,
       domain,
-      auto_join_domain: domain ? true : false,
+      auto_join_domain: !!domain,
       created_by: user.id,
     })
     .select()
@@ -377,13 +323,11 @@ export async function createOrganization(name: string) {
   }
 
   // Add creator as owner
-  const { error: memberError } = await adminClient
-    .from("org_members")
-    .insert({
-      org_id: org.id,
-      user_id: user.id,
-      role: "owner",
-    })
+  const { error: memberError } = await adminClient.from("org_members").insert({
+    org_id: org.id,
+    user_id: user.id,
+    role: "owner",
+  })
 
   if (memberError) {
     return { error: memberError.message }
@@ -407,19 +351,20 @@ async function generateOrgName(): Promise<string> {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
-        "Authorization": `Bearer ${apiKey}`,
+        Authorization: `Bearer ${apiKey}`,
       },
       body: JSON.stringify({
         model: "gpt-4o-mini",
         messages: [
           {
             role: "system",
-            content: "You generate ONE creative, fun, memorable single word. Output ONLY the word, nothing else."
+            content: "You generate ONE creative, fun, memorable single word. Output ONLY the word, nothing else.",
           },
           {
             role: "user",
-            content: "Generate ONE creative word for an organization name. Examples: Moonshot, Nebula, Catalyst, Quantum, Vertex, Forge, Spark, Horizon, Prism, Flux. Output just the word."
-          }
+            content:
+              "Generate ONE creative word for an organization name. Examples: Moonshot, Nebula, Catalyst, Quantum, Vertex, Forge, Spark, Horizon, Prism, Flux. Output just the word.",
+          },
         ],
         max_tokens: 20,
       }),
@@ -428,7 +373,11 @@ async function generateOrgName(): Promise<string> {
     if (!response.ok) throw new Error("API error")
 
     const data = await response.json()
-    const word = data.choices[0]?.message?.content?.trim().toLowerCase().replace(/[^a-z]/g, "") || "spark"
+    const word =
+      data.choices[0]?.message?.content
+        ?.trim()
+        .toLowerCase()
+        .replace(/[^a-z]/g, "") || "spark"
     return `${uuid}-${word}`
   } catch {
     const fallbackWords = ["spark", "forge", "pulse", "nexus", "orbit", "flux", "apex", "nova", "bolt", "wave"]
@@ -440,41 +389,6 @@ async function generateOrgName(): Promise<string> {
 export async function generateAndCreateOrg() {
   const name = await generateOrgName()
   return createOrganization(name)
-}
-
-export async function updateOrganization(orgId: string, updates: { name?: string }) {
-  const supabase = await createClient()
-  const { data: { user } } = await supabase.auth.getUser()
-
-  if (!user) {
-    return { error: "Not authenticated" }
-  }
-
-  // Check user is owner/admin of this org
-  const { data: membership } = await supabase
-    .from("org_members")
-    .select("role")
-    .eq("org_id", orgId)
-    .eq("user_id", user.id)
-    .single()
-
-  if (!membership || (membership.role !== "owner" && membership.role !== "admin")) {
-    return { error: "Not authorized" }
-  }
-
-  const { data, error } = await supabase
-    .from("organizations")
-    .update(updates)
-    .eq("id", orgId)
-    .select()
-    .single()
-
-  if (error) {
-    return { error: error.message }
-  }
-
-  revalidatePath("/", "max")
-  return { data }
 }
 
 export async function getOrgMembers(orgId: string) {
@@ -506,7 +420,7 @@ export async function getOrgMembers(orgId: string) {
 
 export async function getOrgInvites(orgId: string) {
   const supabase = await createClient()
-  
+
   const { data, error } = await supabase
     .from("org_invites")
     .select("*")
@@ -520,18 +434,16 @@ export async function getOrgInvites(orgId: string) {
 
 export async function inviteToOrg(email: string, role: "owner" | "admin" | "member" = "member") {
   const supabase = await createClient()
-  const { data: { user } } = await supabase.auth.getUser()
+  const {
+    data: { user },
+  } = await supabase.auth.getUser()
 
   if (!user) {
     return { error: "Not authenticated" }
   }
 
   // Get user's org and check if they're admin/owner
-  const { data: membership } = await supabase
-    .from("org_members")
-    .select("org_id, role")
-    .eq("user_id", user.id)
-    .single()
+  const { data: membership } = await supabase.from("org_members").select("org_id, role").eq("user_id", user.id).single()
 
   if (!membership || (membership.role !== "owner" && membership.role !== "admin")) {
     return { error: "You don't have permission to invite members" }
@@ -541,12 +453,6 @@ export async function inviteToOrg(email: string, role: "owner" | "admin" | "memb
   if (role === "owner" && membership.role !== "owner") {
     return { error: "Only owners can invite new owners" }
   }
-
-  // Check if email is already a member
-  const { data: existingMember } = await supabase
-    .from("org_members")
-    .select("id")
-    .eq("org_id", membership.org_id)
 
   // Check if invite already exists
   const { data: existingInvite } = await supabase
@@ -586,8 +492,10 @@ export async function inviteToOrg(email: string, role: "owner" | "admin" | "memb
 
 export async function acceptInvite(inviteId: string) {
   const supabase = await createClient()
-  const { data: { user } } = await supabase.auth.getUser()
-  
+  const {
+    data: { user },
+  } = await supabase.auth.getUser()
+
   if (!user?.email) {
     return { error: "Not authenticated" }
   }
@@ -606,24 +514,18 @@ export async function acceptInvite(inviteId: string) {
   }
 
   // Check if already a member of any org
-  const { data: existingMembership } = await supabase
-    .from("org_members")
-    .select("id")
-    .eq("user_id", user.id)
-    .single()
+  const { data: existingMembership } = await supabase.from("org_members").select("id").eq("user_id", user.id).single()
 
   if (existingMembership) {
     return { error: "You are already part of an organization" }
   }
 
   // Add as member
-  const { error: memberError } = await supabase
-    .from("org_members")
-    .insert({
-      org_id: invite.org_id,
-      user_id: user.id,
-      role: invite.role,
-    })
+  const { error: memberError } = await supabase.from("org_members").insert({
+    org_id: invite.org_id,
+    user_id: user.id,
+    role: invite.role,
+  })
 
   if (memberError) {
     return { error: memberError.message }
@@ -638,18 +540,16 @@ export async function acceptInvite(inviteId: string) {
 
 export async function removeOrgMember(memberId: string) {
   const supabase = await createClient()
-  const { data: { user } } = await supabase.auth.getUser()
-  
+  const {
+    data: { user },
+  } = await supabase.auth.getUser()
+
   if (!user) {
     return { error: "Not authenticated" }
   }
 
   // Get user's org and check if they're admin/owner
-  const { data: membership } = await supabase
-    .from("org_members")
-    .select("org_id, role")
-    .eq("user_id", user.id)
-    .single()
+  const { data: membership } = await supabase.from("org_members").select("org_id, role").eq("user_id", user.id).single()
 
   if (!membership || (membership.role !== "owner" && membership.role !== "admin")) {
     return { error: "You don't have permission to remove members" }
@@ -677,10 +577,7 @@ export async function removeOrgMember(memberId: string) {
     return { error: "Admins cannot remove other admins" }
   }
 
-  const { error } = await supabase
-    .from("org_members")
-    .delete()
-    .eq("id", memberId)
+  const { error } = await supabase.from("org_members").delete().eq("id", memberId)
 
   if (error) {
     return { error: error.message }
@@ -692,28 +589,22 @@ export async function removeOrgMember(memberId: string) {
 
 export async function cancelInvite(inviteId: string) {
   const supabase = await createClient()
-  const { data: { user } } = await supabase.auth.getUser()
-  
+  const {
+    data: { user },
+  } = await supabase.auth.getUser()
+
   if (!user) {
     return { error: "Not authenticated" }
   }
 
   // Get user's org
-  const { data: membership } = await supabase
-    .from("org_members")
-    .select("org_id, role")
-    .eq("user_id", user.id)
-    .single()
+  const { data: membership } = await supabase.from("org_members").select("org_id, role").eq("user_id", user.id).single()
 
   if (!membership || (membership.role !== "owner" && membership.role !== "admin")) {
     return { error: "You don't have permission to cancel invites" }
   }
 
-  const { error } = await supabase
-    .from("org_invites")
-    .delete()
-    .eq("id", inviteId)
-    .eq("org_id", membership.org_id)
+  const { error } = await supabase.from("org_invites").delete().eq("id", inviteId).eq("org_id", membership.org_id)
 
   if (error) {
     return { error: error.message }
@@ -725,7 +616,9 @@ export async function cancelInvite(inviteId: string) {
 
 export async function updateMemberName(memberId: string, displayName: string) {
   const supabase = await createClient()
-  const { data: { user } } = await supabase.auth.getUser()
+  const {
+    data: { user },
+  } = await supabase.auth.getUser()
 
   if (!user) {
     return { error: "Not authenticated" }
@@ -759,7 +652,7 @@ export async function updateMemberName(memberId: string, displayName: string) {
 
   // Update user metadata with display name
   const { error } = await adminClient.auth.admin.updateUserById(targetMember.user_id, {
-    user_metadata: { full_name: displayName }
+    user_metadata: { full_name: displayName },
   })
 
   if (error) {
@@ -772,7 +665,9 @@ export async function updateMemberName(memberId: string, displayName: string) {
 
 export async function transferOwnership(memberId: string) {
   const supabase = await createClient()
-  const { data: { user } } = await supabase.auth.getUser()
+  const {
+    data: { user },
+  } = await supabase.auth.getUser()
 
   if (!user) {
     return { error: "Not authenticated" }
@@ -809,10 +704,7 @@ export async function transferOwnership(memberId: string) {
   }
 
   // Transfer ownership: make target owner, make current user admin
-  const { error: targetError } = await adminClient
-    .from("org_members")
-    .update({ role: "owner" })
-    .eq("id", memberId)
+  const { error: targetError } = await adminClient.from("org_members").update({ role: "owner" }).eq("id", memberId)
 
   if (targetError) {
     return { error: targetError.message }
@@ -833,7 +725,9 @@ export async function transferOwnership(memberId: string) {
 
 export async function updateMemberRole(memberId: string, newRole: "owner" | "admin" | "member") {
   const supabase = await createClient()
-  const { data: { user } } = await supabase.auth.getUser()
+  const {
+    data: { user },
+  } = await supabase.auth.getUser()
 
   if (!user) {
     return { error: "Not authenticated" }
@@ -888,10 +782,7 @@ export async function updateMemberRole(memberId: string, newRole: "owner" | "adm
     return { error: "Admins cannot change other admins' roles" }
   }
 
-  const { error } = await adminClient
-    .from("org_members")
-    .update({ role: newRole })
-    .eq("id", memberId)
+  const { error } = await adminClient.from("org_members").update({ role: newRole }).eq("id", memberId)
 
   if (error) {
     return { error: error.message }
@@ -901,9 +792,14 @@ export async function updateMemberRole(memberId: string, newRole: "owner" | "adm
   return { success: true }
 }
 
-export async function updateOrgSettings(orgId: string, settings: { name?: string; auto_join_domain?: boolean; domain?: string | null }) {
+export async function updateOrgSettings(
+  orgId: string,
+  settings: { name?: string; auto_join_domain?: boolean; domain?: string | null }
+) {
   const supabase = await createClient()
-  const { data: { user } } = await supabase.auth.getUser()
+  const {
+    data: { user },
+  } = await supabase.auth.getUser()
 
   if (!user) {
     return { error: "Not authenticated" }
@@ -929,10 +825,7 @@ export async function updateOrgSettings(orgId: string, settings: { name?: string
   if (settings.auto_join_domain !== undefined) updates.auto_join_domain = settings.auto_join_domain
   if (settings.domain !== undefined) updates.domain = settings.domain
 
-  const { error } = await adminClient
-    .from("organizations")
-    .update(updates)
-    .eq("id", orgId)
+  const { error } = await adminClient.from("organizations").update(updates).eq("id", orgId)
 
   if (error) {
     return { error: error.message }
