@@ -6,7 +6,7 @@ import { Button } from "@/lib/components/ui/button"
 import { DottedGlowBackground } from "@/lib/components/ui/dotted-glow-background"
 import { Field, FieldGroup, FieldLabel, FieldSeparator } from "@/lib/components/ui/field"
 import { Input } from "@/lib/components/ui/input"
-import { createClient } from "@/lib/supabase/client"
+import { createClient } from "@/lib/db/client"
 import { cn } from "@/lib/utils"
 
 export function AuthForm() {
