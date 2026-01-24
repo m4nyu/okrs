@@ -1,7 +1,7 @@
-import { createClient } from "@/lib/supabase/server"
 import Link from "next/link"
 import { notFound } from "next/navigation"
-import type { Objective, KeyResult } from "@/lib/types"
+import { createClient } from "@/lib/supabase/server"
+import type { KeyResult, Objective } from "@/lib/types"
 
 export default async function SharePage({ params }: { params: Promise<{ token: string }> }) {
   const { token } = await params
@@ -25,7 +25,9 @@ export default async function SharePage({ params }: { params: Promise<{ token: s
       <header className="border-b border-border">
         <div className="mx-auto flex h-12 max-w-2xl items-center justify-between px-4 text-sm">
           <span className="font-medium">OKR</span>
-          <Link href="/" className="text-xs text-muted-foreground hover:text-foreground">create your own</Link>
+          <Link href="/" className="text-xs text-muted-foreground hover:text-foreground">
+            create your own
+          </Link>
         </div>
       </header>
       <main className="mx-auto max-w-2xl px-4 py-6">
@@ -38,14 +40,18 @@ export default async function SharePage({ params }: { params: Promise<{ token: s
           {(obj.description || krs.length > 0) && (
             <div className="border-t border-border px-4 py-3 space-y-2">
               {obj.description && <p className="text-xs text-muted-foreground">{obj.description}</p>}
-              {krs.map(kr => {
+              {krs.map((kr) => {
                 const p = (kr.current_value / kr.target_value) * 100
                 return (
                   <div key={kr.id} className="flex items-center gap-3 text-xs">
                     <span className="w-12 text-right text-muted-foreground font-mono">{p.toFixed(0)}%</span>
-                    <div className="flex-1 h-1 bg-muted"><div className="h-full bg-foreground/30" style={{ width: `${Math.min(p, 100)}%` }} /></div>
+                    <div className="flex-1 h-1 bg-muted">
+                      <div className="h-full bg-foreground/30" style={{ width: `${Math.min(p, 100)}%` }} />
+                    </div>
                     <span className="text-muted-foreground truncate flex-1">{kr.title}</span>
-                    <span className="text-muted-foreground">{kr.current_value}/{kr.target_value}</span>
+                    <span className="text-muted-foreground">
+                      {kr.current_value}/{kr.target_value}
+                    </span>
                   </div>
                 )
               })}
