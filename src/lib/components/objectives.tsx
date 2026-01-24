@@ -26,9 +26,9 @@ import { OrgSettings, OrgSwitcher } from "@/lib/components/org"
 import { ChartContainer, ChartTooltip } from "@/lib/components/ui/chart"
 import { Drawer, DrawerContent, DrawerHeader, DrawerTitle } from "@/lib/components/ui/drawer"
 import { ScrollArea } from "@/lib/components/ui/scroll-area"
+import { createClient } from "@/lib/db/client"
 import { useIsMobile } from "@/lib/hooks/use-mobile"
 import { useAppStore } from "@/lib/store"
-import { createClient } from "@/lib/supabase/client"
 import type { KeyResult, Objective, ObjectiveWithProgress, Organization } from "@/lib/types"
 
 const CHART_COLORS = ["var(--chart-1)", "var(--chart-2)", "var(--chart-3)", "var(--chart-4)", "var(--chart-5)"]
@@ -493,9 +493,9 @@ function ObjectiveModal({
   onClose: () => void
   onDone: () => void
   devMode?: boolean
-  onDevCreate?: (obj: Objective) => void
-  editingObjective?: Objective | null
-  onDevUpdate?: (obj: Objective) => void
+  onDevCreate?: (obj: ObjectiveWithProgress) => void
+  editingObjective?: ObjectiveWithProgress | null
+  onDevUpdate?: (obj: ObjectiveWithProgress) => void
   orgId: string
 }) {
   const isMobile = useIsMobile()
@@ -893,11 +893,11 @@ function ReportModal({
   onDevUpdate,
   orgId,
 }: {
-  objective: Objective
+  objective: ObjectiveWithProgress
   onClose: () => void
   onDone: () => void
   devMode?: boolean
-  onDevUpdate?: (obj: Objective) => void
+  onDevUpdate?: (obj: ObjectiveWithProgress) => void
   orgId: string
 }) {
   const [loading, setLoading] = useState(false)
@@ -1132,7 +1132,7 @@ function HelpModal({ onClose }: { onClose: () => void }) {
   )
 }
 
-function HistoryModal({ objective, onClose }: { objective: Objective; onClose: () => void }) {
+function HistoryModal({ objective, onClose }: { objective: ObjectiveWithProgress; onClose: () => void }) {
   const isMobile = useIsMobile()
   const sortedUpdates = objective.key_results
     .flatMap((kr) => (kr.progress_updates || []).map((u) => ({ ...u, krTitle: kr.title, unit: kr.unit })))
@@ -1258,7 +1258,7 @@ export function Objectives({ user, org, orgRole, devMode, needsOrgName, userOrgs
     cycleTheme,
   } = useAppStore()
 
-  const [devObjectives, setDevObjectives] = useState<Objective[]>([])
+  const [devObjectives, setDevObjectives] = useState<ObjectiveWithProgress[]>([])
   const { data: dbObjectives = [], mutate } = useSWR(devMode ? null : `objectives-${org.id}`, () =>
     fetchObjectives(org.id)
   )
@@ -1483,7 +1483,7 @@ export function Objectives({ user, org, orgRole, devMode, needsOrgName, userOrgs
             <button
               onClick={() => {
                 supabase.auth.signOut()
-                window.location.reload()
+                window.location.href = "/"
               }}
               className="hover:text-foreground"
             >
@@ -1499,7 +1499,7 @@ export function Objectives({ user, org, orgRole, devMode, needsOrgName, userOrgs
         mobileOpenOrgSettings={openOrgSettings}
         mobileSignOut={() => {
           supabase.auth.signOut()
-          window.location.reload()
+          window.location.href = "/"
         }}
         mobileUserEmail={user.email}
       />
