@@ -53,9 +53,9 @@ interface AppState {
   showOrgSettings: boolean
   showHelp: boolean
   showHistoryModal: boolean
-  editingObjective: Objective | null
-  reportingObjective: Objective | null
-  historyObjective: Objective | null
+  editingObjective: ObjectiveWithProgress | null
+  reportingObjective: ObjectiveWithProgress | null
+  historyObjective: ObjectiveWithProgress | null
 
   // UI - Selection
   selectedIdx: number
@@ -117,15 +117,15 @@ interface AppState {
   setOrgInvites: (invites: OrgInvite[]) => void
 
   // Actions - Modals
-  openObjectiveModal: (editing?: Objective | null) => void
+  openObjectiveModal: (editing?: ObjectiveWithProgress | null) => void
   closeObjectiveModal: () => void
-  openReportModal: (objective: Objective) => void
+  openReportModal: (objective: ObjectiveWithProgress) => void
   closeReportModal: () => void
   openOrgSettings: () => void
   closeOrgSettings: () => void
   openHelp: () => void
   closeHelp: () => void
-  openHistoryModal: (objective: Objective) => void
+  openHistoryModal: (objective: ObjectiveWithProgress) => void
   closeHistoryModal: () => void
   closeAllModals: () => void
 
@@ -496,19 +496,3 @@ export const useAppStore = create<AppState>()(
     }
   )
 )
-
-// Selector hooks for common patterns
-export const useObjectives = () => useAppStore((s) => s.objectives)
-export const useSelectedObjective = () =>
-  useAppStore((s) => (s.selectedIdx >= 0 && s.selectedIdx < s.objectives.length ? s.objectives[s.selectedIdx] : null))
-export const useIsAdmin = () => useAppStore((s) => s.orgRole === "owner" || s.orgRole === "admin")
-export const useTheme = () => useAppStore((s) => s.theme)
-export const useChartPeriod = () => useAppStore((s) => s.chartPeriod)
-export const useModals = () =>
-  useAppStore((s) => ({
-    showObjectiveModal: s.showObjectiveModal,
-    showReportModal: s.showReportModal,
-    showOrgSettings: s.showOrgSettings,
-    showHelp: s.showHelp,
-    showHistoryModal: s.showHistoryModal,
-  }))
