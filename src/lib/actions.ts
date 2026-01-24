@@ -1,7 +1,7 @@
 "use server"
 
 import { revalidatePath } from "next/cache"
-import { createClient } from "@/lib/supabase/server"
+import { createClient } from "@/lib/db/server"
 
 export async function createObjectiveWithKeyResults(payload: unknown, orgId: string) {
   const { createObjectiveSchema } = await import("@/lib/types")
@@ -73,7 +73,7 @@ export async function createObjectiveWithKeyResults(payload: unknown, orgId: str
     }
   }
 
-  revalidatePath("/", "max")
+  revalidatePath("/", "layout")
   return { data: objective }
 }
 
@@ -145,7 +145,7 @@ export async function updateObjectiveWithKeyResults(
     }
   }
 
-  revalidatePath("/", "max")
+  revalidatePath("/", "layout")
   return { success: true }
 }
 
@@ -223,7 +223,7 @@ export async function updateKeyResultProgress(keyResultId: string, newValue: num
     return { error: error.message }
   }
 
-  revalidatePath("/", "max")
+  revalidatePath("/", "layout")
   return { success: true }
 }
 
@@ -256,7 +256,7 @@ export async function deleteObjective(objectiveId: string, orgId: string) {
     return { error: error.message }
   }
 
-  revalidatePath("/", "max")
+  revalidatePath("/", "layout")
   return { success: true }
 }
 
@@ -303,7 +303,7 @@ export async function createOrganization(name: string) {
     .replace(/(^-|-$)/g, "")
 
   // Use admin client to bypass RLS for org creation
-  const { createAdminClient } = await import("@/lib/supabase/server")
+  const { createAdminClient } = await import("@/lib/db/server")
   const adminClient = createAdminClient()
 
   const { data: org, error: orgError } = await adminClient
@@ -392,7 +392,7 @@ export async function generateAndCreateOrg() {
 }
 
 export async function getOrgMembers(orgId: string) {
-  const { createAdminClient } = await import("@/lib/supabase/server")
+  const { createAdminClient } = await import("@/lib/db/server")
   const adminClient = createAdminClient()
 
   const { data, error } = await adminClient
@@ -486,7 +486,7 @@ export async function inviteToOrg(email: string, role: "owner" | "admin" | "memb
     return { error: error.message }
   }
 
-  revalidatePath("/", "max")
+  revalidatePath("/", "layout")
   return { data }
 }
 
@@ -534,7 +534,7 @@ export async function acceptInvite(inviteId: string) {
   // Delete invite
   await supabase.from("org_invites").delete().eq("id", inviteId)
 
-  revalidatePath("/", "max")
+  revalidatePath("/", "layout")
   return { success: true }
 }
 
@@ -583,7 +583,7 @@ export async function removeOrgMember(memberId: string) {
     return { error: error.message }
   }
 
-  revalidatePath("/", "max")
+  revalidatePath("/", "layout")
   return { success: true }
 }
 
@@ -610,7 +610,7 @@ export async function cancelInvite(inviteId: string) {
     return { error: error.message }
   }
 
-  revalidatePath("/", "max")
+  revalidatePath("/", "layout")
   return { success: true }
 }
 
@@ -625,7 +625,7 @@ export async function updateMemberName(memberId: string, displayName: string) {
   }
 
   // Use admin client to bypass RLS
-  const { createAdminClient } = await import("@/lib/supabase/server")
+  const { createAdminClient } = await import("@/lib/db/server")
   const adminClient = createAdminClient()
 
   const { data: membership } = await adminClient
@@ -659,7 +659,7 @@ export async function updateMemberName(memberId: string, displayName: string) {
     return { error: error.message }
   }
 
-  revalidatePath("/", "max")
+  revalidatePath("/", "layout")
   return { success: true }
 }
 
@@ -673,7 +673,7 @@ export async function transferOwnership(memberId: string) {
     return { error: "Not authenticated" }
   }
 
-  const { createAdminClient } = await import("@/lib/supabase/server")
+  const { createAdminClient } = await import("@/lib/db/server")
   const adminClient = createAdminClient()
 
   // Check current user is the owner
@@ -719,7 +719,7 @@ export async function transferOwnership(memberId: string) {
     return { error: currentError.message }
   }
 
-  revalidatePath("/", "max")
+  revalidatePath("/", "layout")
   return { success: true }
 }
 
@@ -734,7 +734,7 @@ export async function updateMemberRole(memberId: string, newRole: "owner" | "adm
   }
 
   // Use admin client to bypass RLS
-  const { createAdminClient } = await import("@/lib/supabase/server")
+  const { createAdminClient } = await import("@/lib/db/server")
   const adminClient = createAdminClient()
 
   const { data: membership } = await adminClient
@@ -788,7 +788,7 @@ export async function updateMemberRole(memberId: string, newRole: "owner" | "adm
     return { error: error.message }
   }
 
-  revalidatePath("/", "max")
+  revalidatePath("/", "layout")
   return { success: true }
 }
 
@@ -806,7 +806,7 @@ export async function updateOrgSettings(
   }
 
   // Use admin client to bypass RLS
-  const { createAdminClient } = await import("@/lib/supabase/server")
+  const { createAdminClient } = await import("@/lib/db/server")
   const adminClient = createAdminClient()
 
   const { data: membership } = await adminClient
@@ -831,6 +831,6 @@ export async function updateOrgSettings(
     return { error: error.message }
   }
 
-  revalidatePath("/", "max")
+  revalidatePath("/", "layout")
   return { success: true }
 }
