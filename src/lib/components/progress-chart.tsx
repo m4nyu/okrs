@@ -4,7 +4,7 @@ import { Circle, Diamond, Hexagon, Square, Triangle } from "lucide-react"
 import React from "react"
 import { CartesianGrid, Line, LineChart, XAxis, YAxis } from "recharts"
 import { ChartContainer, ChartTooltip } from "@/lib/components/ui/chart"
-import { useStore, $ } from "@/lib/store"
+import { $, useStore } from "@/lib/store"
 import type { ObjectiveWithProgress } from "@/lib/types"
 
 const CHART_COLORS = ["var(--chart-1)", "var(--chart-2)", "var(--chart-3)", "var(--chart-4)", "var(--chart-5)"]
@@ -18,7 +18,7 @@ interface ProgressChartProps {
 }
 
 export default function ProgressChart({ objectives, hoveredObj, setHoveredObj }: ProgressChartProps) {
-  const range = useStore(s => s.range)
+  const range = useStore((s) => s.range)
 
   const getPeriodBounds = () => {
     const now = new Date()
