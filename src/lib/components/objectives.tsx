@@ -1309,6 +1309,7 @@ export function Objectives({ user, org, orgRole, devMode, needsOrgName, userOrgs
             return r
           }}
           onUpdateSettings={async (s) => (await import("@/lib/actions")).updateOrg(org.id, s)}
+          onDeleteOrg={async () => (await import("@/lib/actions")).deleteOrg(org.id)}
           highlightOrgName={needsOrgName}
         />
       )}
