@@ -49,7 +49,7 @@ export function AuthForm() {
           />
         </div>
         <div className="absolute inset-0 flex flex-col items-center justify-center p-10 z-10">
-          <div className="max-w-md text-center">
+          <div className="max-w-md text-center select-none">
             <h2 className="text-3xl font-bold tracking-tight mb-4 text-foreground">Startup goals for your team</h2>
             <p className="text-muted-foreground">
               Set objectives, track key results, and align your team around what matters most.
