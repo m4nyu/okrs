@@ -1736,7 +1736,7 @@ export function Objectives({ user, org, orgRole, devMode, needsOrgName, userOrgs
           onClose={closeOrgSettings}
           onInvite={async (email, role) => {
             const { inviteToOrg } = await import("@/lib/actions")
-            const result = await inviteToOrg(email, role)
+            const result = await inviteToOrg(org.id, email, role)
             if (!result.error) {
               const { getOrgInvites } = await import("@/lib/actions")
               setOrgInvites(await getOrgInvites(org.id))
@@ -1745,7 +1745,7 @@ export function Objectives({ user, org, orgRole, devMode, needsOrgName, userOrgs
           }}
           onRemoveMember={async (memberId) => {
             const { removeOrgMember } = await import("@/lib/actions")
-            const result = await removeOrgMember(memberId)
+            const result = await removeOrgMember(org.id, memberId)
             if (!result.error) {
               const { getOrgMembers } = await import("@/lib/actions")
               setOrgMembers(await getOrgMembers(org.id))
@@ -1754,7 +1754,7 @@ export function Objectives({ user, org, orgRole, devMode, needsOrgName, userOrgs
           }}
           onUpdateMemberRole={async (memberId, role) => {
             const { updateMemberRole } = await import("@/lib/actions")
-            const result = await updateMemberRole(memberId, role)
+            const result = await updateMemberRole(org.id, memberId, role)
             if (!result.error) {
               const { getOrgMembers } = await import("@/lib/actions")
               setOrgMembers(await getOrgMembers(org.id))
@@ -1763,7 +1763,7 @@ export function Objectives({ user, org, orgRole, devMode, needsOrgName, userOrgs
           }}
           onUpdateMemberName={async (memberId, name) => {
             const { updateMemberName } = await import("@/lib/actions")
-            const result = await updateMemberName(memberId, name)
+            const result = await updateMemberName(org.id, memberId, name)
             if (!result.error) {
               const { getOrgMembers } = await import("@/lib/actions")
               setOrgMembers(await getOrgMembers(org.id))
@@ -1772,7 +1772,7 @@ export function Objectives({ user, org, orgRole, devMode, needsOrgName, userOrgs
           }}
           onTransferOwnership={async (memberId) => {
             const { transferOwnership } = await import("@/lib/actions")
-            const result = await transferOwnership(memberId)
+            const result = await transferOwnership(org.id, memberId)
             if (!result.error) {
               const { getOrgMembers } = await import("@/lib/actions")
               setOrgMembers(await getOrgMembers(org.id))
@@ -1781,7 +1781,7 @@ export function Objectives({ user, org, orgRole, devMode, needsOrgName, userOrgs
           }}
           onCancelInvite={async (inviteId) => {
             const { cancelInvite } = await import("@/lib/actions")
-            const result = await cancelInvite(inviteId)
+            const result = await cancelInvite(org.id, inviteId)
             if (!result.error) {
               const { getOrgInvites } = await import("@/lib/actions")
               setOrgInvites(await getOrgInvites(org.id))
