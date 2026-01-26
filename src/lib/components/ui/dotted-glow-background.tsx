@@ -1,6 +1,6 @@
 "use client"
 
-import { useCallback, useEffect, useRef, useState } from "react"
+import { useEffect, useRef, useState } from "react"
 
 // Debounce helper
 function debounce<T extends (...args: unknown[]) => void>(fn: T, ms: number): T {
@@ -218,9 +218,11 @@ export const DottedGlowBackground = ({
       // Skip background gradient if not needed
       if (backgroundOpacity > 0) {
         const grad = ctx.createRadialGradient(
-          cachedWidth * 0.5, cachedHeight * 0.4,
+          cachedWidth * 0.5,
+          cachedHeight * 0.4,
           Math.min(cachedWidth, cachedHeight) * 0.1,
-          cachedWidth * 0.5, cachedHeight * 0.5,
+          cachedWidth * 0.5,
+          cachedHeight * 0.5,
           Math.max(cachedWidth, cachedHeight) * 0.7
         )
         grad.addColorStop(0, "rgba(0,0,0,0)")
