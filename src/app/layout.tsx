@@ -15,6 +15,17 @@ export const metadata: Metadata = {
   twitter: {
     card: "summary_large_image",
   },
+  openGraph: {
+    title: "OKRs",
+    description: "Set objectives, track key results, and align your team around what matters most.",
+    images: ["/app.png"],
+  },
+  twitter: {
+    card: "summary_large_image",
+    title: "OKRs",
+    description: "Set objectives, track key results, and align your team around what matters most.",
+    images: ["/app.png"],
+  },
 }
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {

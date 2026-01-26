@@ -3,30 +3,27 @@
 import type { User } from "@supabase/supabase-js"
 import {
   ChevronRight,
-  Circle,
-  Diamond,
-  Hexagon,
   Loader2,
   Monitor,
   Moon,
   MoreVertical,
   Plus,
   Sparkles,
-  Square,
   Sun,
   Target,
   Trash2,
-  Triangle,
   X,
 } from "lucide-react"
-import React, { useCallback, useEffect, useState } from "react"
 import dynamic from "next/dynamic"
+import type React from "react"
+import { useCallback, useEffect, useState } from "react"
 
 // Lazy load chart to defer ~250KB recharts bundle
 const ProgressChart = dynamic(() => import("@/lib/components/progress-chart"), {
   ssr: false,
   loading: () => <div className="h-64 mb-8 animate-pulse bg-muted/30 rounded" />,
 })
+
 import useSWR from "swr"
 import { OrgSettings, OrgSwitcher, UserMenu } from "@/lib/components/org"
 import { CHART_FILL_CLASSES, OKR_ICONS } from "@/lib/components/progress-chart"
@@ -34,7 +31,7 @@ import { Drawer, DrawerContent, DrawerHeader, DrawerTitle } from "@/lib/componen
 import { ScrollArea } from "@/lib/components/ui/scroll-area"
 import { createClient } from "@/lib/db/client"
 import { useIsMobile } from "@/lib/hooks/use-mobile"
-import { useStore, $ } from "@/lib/store"
+import { $, useStore } from "@/lib/store"
 import type { KeyResult, Objective, ObjectiveWithProgress, Organization } from "@/lib/types"
 
 const MAX_OBJECTIVES = 5
@@ -99,7 +96,7 @@ function ThemeButton({
   mobileSignOut?: () => void
   mobileUserEmail?: string
 }) {
-  const theme = useStore(s => s.theme)
+  const theme = useStore((s) => s.theme)
   const [open, setOpen] = useState(false)
 
   useEffect(() => {
@@ -110,7 +107,10 @@ function ThemeButton({
     }
   }, [theme])
 
-  const select = (v: "light" | "dark" | "system") => { $.set("theme", v); setOpen(false) }
+  const select = (v: "light" | "dark" | "system") => {
+    $.set("theme", v)
+    setOpen(false)
+  }
 
   const Icon = theme === "light" ? Sun : theme === "dark" ? Moon : Monitor
 
@@ -157,13 +157,7 @@ function ThemeButton({
             openUp
           />
         )}
-        {mobileUserEmail && mobileSignOut && (
-          <UserMenu
-            email={mobileUserEmail}
-            onSignOut={mobileSignOut}
-            openUp
-          />
-        )}
+        {mobileUserEmail && mobileSignOut && <UserMenu email={mobileUserEmail} onSignOut={mobileSignOut} openUp />}
       </nav>
       <div className="hidden md:flex fixed bottom-4 right-4 z-40 select-none gap-1">
         <button
@@ -954,7 +948,10 @@ export function Objectives({ user, org, orgRole, devMode, needsOrgName, userOrgs
       Promise.all([
         import("@/lib/actions").then((m) => m.getMembers(org.id)),
         import("@/lib/actions").then((m) => m.getInvites(org.id)),
-      ]).then(([m, i]) => { $.set("members", m); $.set("invites", i) })
+      ]).then(([m, i]) => {
+        $.set("members", m)
+        $.set("invites", i)
+      })
     }
   }, [view, org, devMode])
 
@@ -967,7 +964,10 @@ export function Objectives({ user, org, orgRole, devMode, needsOrgName, userOrgs
         return
       }
       // Optimistic update - remove from UI immediately
-      $.set("objs", objs.filter((o) => o.id !== id))
+      $.set(
+        "objs",
+        objs.filter((o) => o.id !== id)
+      )
       const { deleteObjective } = await import("@/lib/actions")
       await deleteObjective(id, org.id)
       mutate()
@@ -1036,7 +1036,9 @@ export function Objectives({ user, org, orgRole, devMode, needsOrgName, userOrgs
             <OrgSwitcher
               currentOrg={org}
               orgs={userOrgs}
-              onCreateOrg={() => window.location.href = "/?new=1"}
+              onCreateOrg={() => {
+                window.location.href = "/?new=1"
+              }}
               onEditOrg={() => $.show("settings")}
             />
             <UserMenu
@@ -1054,7 +1056,10 @@ export function Objectives({ user, org, orgRole, devMode, needsOrgName, userOrgs
         mobileOrg={org}
         mobileUserOrgs={userOrgs}
         mobileOpenOrgSettings={() => $.show("settings")}
-        mobileSignOut={() => { supabase.auth.signOut(); window.location.href = "/" }}
+        mobileSignOut={() => {
+          supabase.auth.signOut()
+          window.location.href = "/"
+        }}
         mobileUserEmail={user.email}
       />
 
@@ -1069,7 +1074,8 @@ export function Objectives({ user, org, orgRole, devMode, needsOrgName, userOrgs
               className={`flex items-center gap-1.5 text-xs ${canAddObjective ? "text-muted-foreground hover:text-foreground" : "text-muted-foreground/50 cursor-not-allowed"}`}
               title={!canAddObjective ? `Maximum ${MAX_OBJECTIVES} objectives reached` : undefined}
             >
-              <Plus className="h-3.5 w-3.5" /> New <kbd className="ml-1 px-1.5 py-0.5 bg-muted font-mono text-[10px]">⌘N</kbd>
+              <Plus className="h-3.5 w-3.5" /> New{" "}
+              <kbd className="ml-1 px-1.5 py-0.5 bg-muted font-mono text-[10px]">⌘N</kbd>
             </button>
           </div>
         </div>
@@ -1173,14 +1179,20 @@ export function Objectives({ user, org, orgRole, devMode, needsOrgName, userOrgs
                               <div className="fixed inset-0 z-40" onClick={() => $.set("menu", null)} />
                               <div className="absolute right-0 top-full mt-1 z-50 min-w-[120px] bg-popover border border-border rounded-md shadow-md py-1">
                                 <button
-                                  onClick={() => { $.show("objective", obj); $.set("menu", null) }}
+                                  onClick={() => {
+                                    $.show("objective", obj)
+                                    $.set("menu", null)
+                                  }}
                                   className="w-full px-3 py-1.5 text-left text-sm hover:bg-muted/50 flex items-center justify-between"
                                 >
                                   <span>Edit</span>
                                   <kbd className="text-[10px] text-muted-foreground font-mono">E</kbd>
                                 </button>
                                 <button
-                                  onClick={() => { deleteObj(obj.id); $.set("menu", null) }}
+                                  onClick={() => {
+                                    deleteObj(obj.id)
+                                    $.set("menu", null)
+                                  }}
                                   className="w-full px-3 py-1.5 text-left text-sm text-red-400 hover:bg-muted/50 flex items-center justify-between"
                                 >
                                   <span>Delete</span>
@@ -1247,11 +1259,14 @@ export function Objectives({ user, org, orgRole, devMode, needsOrgName, userOrgs
       {view === "objective" && (
         <ObjectiveModal
           onClose={$.hide}
-          onDone={() => { $.hide(); if (!devMode) mutate() }}
+          onDone={() => {
+            $.hide()
+            if (!devMode) mutate()
+          }}
           devMode={devMode}
           editingObjective={editing}
           onDevCreate={(obj) => setDevObjectives((p) => [obj, ...p])}
-          onDevUpdate={(obj) => setDevObjectives((p) => p.map((o) => o.id === obj.id ? obj : o))}
+          onDevUpdate={(obj) => setDevObjectives((p) => p.map((o) => (o.id === obj.id ? obj : o)))}
           orgId={org.id}
         />
       )}
@@ -1259,9 +1274,12 @@ export function Objectives({ user, org, orgRole, devMode, needsOrgName, userOrgs
         <ReportModal
           objective={editing}
           onClose={$.hide}
-          onDone={() => { $.hide(); if (!devMode) mutate() }}
+          onDone={() => {
+            $.hide()
+            if (!devMode) mutate()
+          }}
           devMode={devMode}
-          onDevUpdate={(obj) => setDevObjectives((p) => p.map((o) => o.id === obj.id ? obj : o))}
+          onDevUpdate={(obj) => setDevObjectives((p) => p.map((o) => (o.id === obj.id ? obj : o)))}
           orgId={org.id}
         />
       )}

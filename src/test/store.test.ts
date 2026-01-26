@@ -1,13 +1,22 @@
-import { describe, it, expect, beforeEach } from "vitest"
-import { useStore, $ } from "@/lib/store"
+import { beforeEach, describe, expect, it } from "vitest"
+import { $, useStore } from "@/lib/store"
 
 describe("store", () => {
   beforeEach(() => {
     // Reset store state
     useStore.setState({
-      objs: [], members: [], invites: [], view: null, editing: null,
-      idx: -1, hover: null, open: new Set(), menu: null, tab: "members",
-      range: "Q", theme: "system",
+      objs: [],
+      members: [],
+      invites: [],
+      view: null,
+      editing: null,
+      idx: -1,
+      hover: null,
+      open: new Set(),
+      menu: null,
+      tab: "members",
+      range: "Q",
+      theme: "system",
     })
   })
 

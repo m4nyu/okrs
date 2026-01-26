@@ -1,11 +1,13 @@
 "use server"
 
 import { revalidatePath } from "next/cache"
-import { createClient, createAdminClient } from "@/lib/db/server"
+import { createAdminClient, createClient } from "@/lib/db/server"
 
 async function auth() {
   const supabase = await createClient()
-  const { data: { user } } = await supabase.auth.getUser()
+  const {
+    data: { user },
+  } = await supabase.auth.getUser()
   return { supabase, user }
 }
 
@@ -23,11 +25,11 @@ function revalidate() {
 export async function createObjective(payload: unknown, orgId: string) {
   const { createObjectiveSchema } = await import("@/lib/types")
   const parsed = createObjectiveSchema.safeParse(payload)
-  if (!parsed.success) return { error: parsed.error.errors.map(e => e.message).join(", ") }
+  if (!parsed.success) return { error: parsed.error.errors.map((e) => e.message).join(", ") }
 
   const { supabase, user } = await auth()
   if (!user) return { error: "Not authenticated" }
-  if (!await checkMembership(supabase, user.id, orgId)) return { error: "Not authorized" }
+  if (!(await checkMembership(supabase, user.id, orgId))) return { error: "Not authorized" }
 
   const { title, description, endDate, keyResults } = parsed.data
 
@@ -42,13 +44,15 @@ export async function createObjective(payload: unknown, orgId: string) {
   if (keyResults.length > 0) {
     const { data: krs, error: krError } = await supabase
       .from("key_results")
-      .insert(keyResults.map(kr => ({
-        objective_id: objective.id,
-        title: kr.title,
-        target_value: kr.targetValue,
-        current_value: kr.startValue || 0,
-        unit: kr.unit,
-      })))
+      .insert(
+        keyResults.map((kr) => ({
+          objective_id: objective.id,
+          title: kr.title,
+          target_value: kr.targetValue,
+          current_value: kr.startValue || 0,
+          unit: kr.unit,
+        }))
+      )
       .select()
 
     if (krError) return { error: krError.message }
@@ -56,7 +60,12 @@ export async function createObjective(payload: unknown, orgId: string) {
     if (krs) {
       const updates = krs
         .filter((kr: any) => kr.current_value !== 0)
-        .map((kr: any) => ({ key_result_id: kr.id, previous_value: 0, new_value: kr.current_value, note: "Initial value" }))
+        .map((kr: any) => ({
+          key_result_id: kr.id,
+          previous_value: 0,
+          new_value: kr.current_value,
+          note: "Initial value",
+        }))
       if (updates.length > 0) await supabase.from("progress_updates").insert(updates)
     }
   }
@@ -66,12 +75,18 @@ export async function createObjective(payload: unknown, orgId: string) {
 }
 
 export async function updateObjective(
-  payload: { id: string; title: string; description: string; endDate: string; keyResults: { id: string; title: string; targetValue: number; unit: string; startValue: number }[] },
+  payload: {
+    id: string
+    title: string
+    description: string
+    endDate: string
+    keyResults: { id: string; title: string; targetValue: number; unit: string; startValue: number }[]
+  },
   orgId: string
 ) {
   const { supabase, user } = await auth()
   if (!user) return { error: "Not authenticated" }
-  if (!await checkMembership(supabase, user.id, orgId)) return { error: "Not authorized" }
+  if (!(await checkMembership(supabase, user.id, orgId))) return { error: "Not authorized" }
 
   const { id, title, description, endDate, keyResults } = payload
 
@@ -86,15 +101,15 @@ export async function updateObjective(
   await supabase.from("key_results").delete().eq("objective_id", id)
 
   if (keyResults.length > 0) {
-    const { error: krError } = await supabase
-      .from("key_results")
-      .insert(keyResults.map(kr => ({
+    const { error: krError } = await supabase.from("key_results").insert(
+      keyResults.map((kr) => ({
         objective_id: id,
         title: kr.title,
         target_value: kr.targetValue,
         current_value: kr.startValue || 0,
         unit: kr.unit,
-      })))
+      }))
+    )
     if (krError) return { error: krError.message }
   }
 
@@ -105,7 +120,7 @@ export async function updateObjective(
 export async function updateProgress(keyResultId: string, newValue: number, orgId: string, note?: string) {
   const { supabase, user } = await auth()
   if (!user) return { error: "Not authenticated" }
-  if (!await checkMembership(supabase, user.id, orgId)) return { error: "Not authorized" }
+  if (!(await checkMembership(supabase, user.id, orgId))) return { error: "Not authorized" }
 
   const { data: kr, error: fetchError } = await supabase
     .from("key_results")
@@ -168,13 +183,18 @@ export async function generateOrg() {
 
   if (orgError) return { error: orgError.message }
 
-  const { error: memberError } = await admin.from("org_members").insert({ org_id: org.id, user_id: user.id, role: "owner" })
+  const { error: memberError } = await admin
+    .from("org_members")
+    .insert({ org_id: org.id, user_id: user.id, role: "owner" })
   if (memberError) return { error: memberError.message }
 
   return { data: org }
 }
 
-export async function updateOrg(orgId: string, settings: { name?: string; auto_join_domain?: boolean; domain?: string | null }) {
+export async function updateOrg(
+  orgId: string,
+  settings: { name?: string; auto_join_domain?: boolean; domain?: string | null }
+) {
   const { user } = await auth()
   if (!user) return { error: "Not authenticated" }
 
@@ -199,16 +219,26 @@ export async function updateOrg(orgId: string, settings: { name?: string; auto_j
 export async function getMembers(orgId: string) {
   const { supabase, user } = await auth()
   if (!user) return []
-  if (!await checkMembership(supabase, user.id, orgId)) return []
+  if (!(await checkMembership(supabase, user.id, orgId))) return []
 
   const admin = createAdminClient()
-  const { data, error } = await admin.from("org_members").select("*").eq("org_id", orgId).order("joined_at", { ascending: true })
+  const { data, error } = await admin
+    .from("org_members")
+    .select("*")
+    .eq("org_id", orgId)
+    .order("joined_at", { ascending: true })
   if (error) return []
 
-  return Promise.all(data.map(async m => {
-    const { data: u } = await admin.auth.admin.getUserById(m.user_id)
-    return { ...m, user_email: u?.user?.email, user_name: u?.user?.user_metadata?.full_name || u?.user?.user_metadata?.name }
-  }))
+  return Promise.all(
+    data.map(async (m) => {
+      const { data: u } = await admin.auth.admin.getUserById(m.user_id)
+      return {
+        ...m,
+        user_email: u?.user?.email,
+        user_name: u?.user?.user_metadata?.full_name || u?.user?.user_metadata?.name,
+      }
+    })
+  )
 }
 
 export async function removeMember(orgId: string, memberId: string) {
@@ -218,7 +248,12 @@ export async function removeMember(orgId: string, memberId: string) {
   const m = await checkMembership(supabase, user.id, orgId)
   if (!m || (m.role !== "owner" && m.role !== "admin")) return { error: "Not authorized" }
 
-  const { data: target } = await supabase.from("org_members").select("role").eq("id", memberId).eq("org_id", orgId).single()
+  const { data: target } = await supabase
+    .from("org_members")
+    .select("role")
+    .eq("id", memberId)
+    .eq("org_id", orgId)
+    .single()
   if (!target) return { error: "Member not found" }
   if (target.role === "owner") return { error: "Cannot remove owner" }
   if (m.role === "admin" && target.role === "admin") return { error: "Admins cannot remove other admins" }
@@ -238,7 +273,12 @@ export async function renameMember(orgId: string, memberId: string, displayName:
   const m = await checkMembership(admin as any, user.id, orgId)
   if (!m || (m.role !== "owner" && m.role !== "admin")) return { error: "Not authorized" }
 
-  const { data: target } = await admin.from("org_members").select("user_id").eq("id", memberId).eq("org_id", orgId).single()
+  const { data: target } = await admin
+    .from("org_members")
+    .select("user_id")
+    .eq("id", memberId)
+    .eq("org_id", orgId)
+    .single()
   if (!target) return { error: "Member not found" }
 
   const { error } = await admin.auth.admin.updateUserById(target.user_id, { user_metadata: { full_name: displayName } })
@@ -256,13 +296,23 @@ export async function setMemberRole(orgId: string, memberId: string, newRole: "o
   const m = await checkMembership(admin as any, user.id, orgId)
   if (!m || (m.role !== "owner" && m.role !== "admin")) return { error: "Not authorized" }
 
-  const { data: target } = await admin.from("org_members").select("role").eq("id", memberId).eq("org_id", orgId).single()
+  const { data: target } = await admin
+    .from("org_members")
+    .select("role")
+    .eq("id", memberId)
+    .eq("org_id", orgId)
+    .single()
   if (!target) return { error: "Member not found" }
 
-  if ((newRole === "owner" || target.role === "owner") && m.role !== "owner") return { error: "Only owners can change owner roles" }
+  if ((newRole === "owner" || target.role === "owner") && m.role !== "owner")
+    return { error: "Only owners can change owner roles" }
 
   if (target.role === "owner" && newRole !== "owner") {
-    const { count } = await admin.from("org_members").select("*", { count: "exact", head: true }).eq("org_id", orgId).eq("role", "owner")
+    const { count } = await admin
+      .from("org_members")
+      .select("*", { count: "exact", head: true })
+      .eq("org_id", orgId)
+      .eq("role", "owner")
     if (count && count <= 1) return { error: "Cannot demote last owner" }
   }
 
@@ -281,10 +331,20 @@ export async function transferOwnership(orgId: string, memberId: string) {
 
   const admin = createAdminClient()
 
-  const { data: current } = await admin.from("org_members").select("id, role").eq("user_id", user.id).eq("org_id", orgId).single()
+  const { data: current } = await admin
+    .from("org_members")
+    .select("id, role")
+    .eq("user_id", user.id)
+    .eq("org_id", orgId)
+    .single()
   if (!current || current.role !== "owner") return { error: "Only owner can transfer" }
 
-  const { data: target } = await admin.from("org_members").select("role").eq("id", memberId).eq("org_id", orgId).single()
+  const { data: target } = await admin
+    .from("org_members")
+    .select("role")
+    .eq("id", memberId)
+    .eq("org_id", orgId)
+    .single()
   if (!target) return { error: "Member not found" }
   if (target.role === "owner") return { error: "Already owner" }
 
@@ -346,7 +406,13 @@ export async function sendInvite(orgId: string, email: string, inviteRole: "owne
 
   const { data, error } = await supabase
     .from("org_invites")
-    .insert({ org_id: orgId, email: email.toLowerCase(), role: inviteRole, invited_by: user.id, expires_at: expiresAt.toISOString() })
+    .insert({
+      org_id: orgId,
+      email: email.toLowerCase(),
+      role: inviteRole,
+      invited_by: user.id,
+      expires_at: expiresAt.toISOString(),
+    })
     .select("*, organizations(name)")
     .single()
 
@@ -395,7 +461,12 @@ export async function acceptInvite(token: string) {
 
   if (!inv) return { error: "Invalid or expired invite" }
 
-  const { data: existing } = await supabase.from("org_members").select("id").eq("user_id", user.id).eq("org_id", inv.org_id).single()
+  const { data: existing } = await supabase
+    .from("org_members")
+    .select("id")
+    .eq("user_id", user.id)
+    .eq("org_id", inv.org_id)
+    .single()
 
   if (existing) {
     await supabase.from("org_invites").delete().eq("id", inv.id)
@@ -440,7 +511,13 @@ export async function deleteOrg(orgId: string) {
     const objIds = objectives.map((o) => o.id)
     const { data: keyResults } = await supabase.from("key_results").select("id").in("objective_id", objIds)
     if (keyResults?.length) {
-      await supabase.from("progress_updates").delete().in("key_result_id", keyResults.map((k) => k.id))
+      await supabase
+        .from("progress_updates")
+        .delete()
+        .in(
+          "key_result_id",
+          keyResults.map((k) => k.id)
+        )
     }
     // 2. Delete key results
     await supabase.from("key_results").delete().in("objective_id", objIds)

@@ -4,7 +4,7 @@ import { Check, ChevronDown, Loader2, Plus, X } from "lucide-react"
 import { useRouter } from "next/navigation"
 import type React from "react"
 import { useEffect, useRef, useState } from "react"
-import { Drawer, DrawerContent, DrawerHeader, DrawerTitle, DrawerDescription } from "@/lib/components/ui/drawer"
+import { Drawer, DrawerContent, DrawerDescription, DrawerHeader, DrawerTitle } from "@/lib/components/ui/drawer"
 import { ScrollArea } from "@/lib/components/ui/scroll-area"
 import { TabsList, TabsTrigger } from "@/lib/components/ui/tabs"
 import { useIsMobile } from "@/lib/hooks/use-mobile"
@@ -793,11 +793,17 @@ export function OrgSettings({
         {content}
       </div>
       {confirmDelete && (
-        <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/50 p-4" onClick={() => setConfirmDelete(false)}>
+        <div
+          className="fixed inset-0 z-[60] flex items-center justify-center bg-black/50 p-4"
+          onClick={() => setConfirmDelete(false)}
+        >
           <div className="w-full max-w-xs border border-border bg-background p-4" onClick={(e) => e.stopPropagation()}>
             <p className="text-sm mb-4">Delete "{org.name}" and all its data?</p>
             <div className="flex gap-2 justify-end">
-              <button onClick={() => setConfirmDelete(false)} className="px-3 py-1.5 text-xs text-muted-foreground hover:text-foreground">
+              <button
+                onClick={() => setConfirmDelete(false)}
+                className="px-3 py-1.5 text-xs text-muted-foreground hover:text-foreground"
+              >
                 cancel
               </button>
               <button
@@ -884,7 +890,10 @@ export function UserMenu({ email, onSignOut, openUp }: UserMenuProps) {
     }
 
     return (
-      <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4" onClick={() => setShowDeleteConfirm(false)}>
+      <div
+        className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4"
+        onClick={() => setShowDeleteConfirm(false)}
+      >
         <div className="w-full max-w-xs border border-border bg-background p-5" onClick={(e) => e.stopPropagation()}>
           <div className="flex justify-between items-center mb-4 select-none">
             <span className="font-medium text-sm text-red-500">Delete Account</span>
