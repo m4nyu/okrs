@@ -5,11 +5,23 @@ import type React from "react"
 import "../lib/styles/globals.css"
 
 export const metadata: Metadata = {
+  metadataBase: new URL(process.env.NEXT_PUBLIC_SITE_URL || "https://okrs.vercel.app"),
   title: "OKRs",
-  description: "Track objectives and key results",
+  description: "Set objectives, track key results, and align your team around what matters most.",
   icons: {
     icon: [{ url: "/icon.svg", type: "image/svg+xml" }],
     apple: "/apple-icon.png",
+  },
+  openGraph: {
+    title: "OKRs",
+    description: "Set objectives, track key results, and align your team around what matters most.",
+    images: ["/app.png"],
+  },
+  twitter: {
+    card: "summary_large_image",
+    title: "OKRs",
+    description: "Set objectives, track key results, and align your team around what matters most.",
+    images: ["/app.png"],
   },
 }
 
