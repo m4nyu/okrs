@@ -966,11 +966,13 @@ export function Objectives({ user, org, orgRole, devMode, needsOrgName, userOrgs
         setDevObjectives((prev) => prev.filter((o) => o.id !== id))
         return
       }
+      // Optimistic update - remove from UI immediately
+      $.set("objs", objs.filter((o) => o.id !== id))
       const { deleteObjective } = await import("@/lib/actions")
       await deleteObjective(id, org.id)
       mutate()
     },
-    [devMode, org.id, mutate]
+    [devMode, org.id, mutate, objs]
   )
 
   const onKey = useCallback(
@@ -1307,6 +1309,7 @@ export function Objectives({ user, org, orgRole, devMode, needsOrgName, userOrgs
             return r
           }}
           onUpdateSettings={async (s) => (await import("@/lib/actions")).updateOrg(org.id, s)}
+          onDeleteOrg={async () => (await import("@/lib/actions")).deleteOrg(org.id)}
           highlightOrgName={needsOrgName}
         />
       )}
