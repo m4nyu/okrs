@@ -31,6 +31,13 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
             `,
           }}
         />
+        {process.env.NEXT_PUBLIC_BEAM_TOKEN && (
+          <script
+            src="https://beamanalytics.b-cdn.net/beam.min.js"
+            data-token={process.env.NEXT_PUBLIC_BEAM_TOKEN}
+            async
+          />
+        )}
       </head>
       <body
         className={`${GeistSans.variable} ${GeistMono.variable} font-sans antialiased bg-background text-foreground`}
