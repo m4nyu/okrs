@@ -443,7 +443,11 @@ export async function inviteToOrg(email: string, role: "owner" | "admin" | "memb
   }
 
   // Get user's org and check if they're admin/owner
-  const { data: membership } = await supabase.from("org_members").select("org_id, role").eq("user_id", user.id).single()
+  const { data: membership } = await supabase
+    .from("org_members")
+    .select("org_id, role, organizations(name)")
+    .eq("user_id", user.id)
+    .single()
 
   if (!membership || (membership.role !== "owner" && membership.role !== "admin")) {
     return { error: "You don't have permission to invite members" }
@@ -479,18 +483,46 @@ export async function inviteToOrg(email: string, role: "owner" | "admin" | "memb
       invited_by: user.id,
       expires_at: expiresAt.toISOString(),
     })
-    .select()
+    .select("*, organizations(name)")
     .single()
 
   if (error) {
     return { error: error.message }
   }
 
+  // Send invite email via Resend
+  const orgName = (data.organizations as any)?.name || "an organization"
+  const inviteUrl = `${process.env.NEXT_PUBLIC_APP_URL || "https://okrs.dev"}/invite/${data.token}`
+
+  try {
+    const { Resend } = await import("resend")
+    const resend = new Resend(process.env.RESEND_API_KEY)
+
+    await resend.emails.send({
+      from: process.env.RESEND_FROM_EMAIL || "OKR <noreply@okrs.dev>",
+      to: email.toLowerCase(),
+      subject: `You're invited to join ${orgName}`,
+      html: `
+        <div style="font-family: sans-serif; max-width: 600px; margin: 0 auto;">
+          <h2>You're invited!</h2>
+          <p>${user.email} has invited you to join <strong>${orgName}</strong> on OKR.</p>
+          <p>Click the button below to accept your invitation:</p>
+          <a href="${inviteUrl}" style="display: inline-block; background: #000; color: #fff; padding: 12px 24px; text-decoration: none; margin: 16px 0;">Accept Invitation</a>
+          <p style="color: #666; font-size: 14px;">This invite expires in 7 days.</p>
+          <p style="color: #666; font-size: 12px;">If the button doesn't work, copy and paste this link: ${inviteUrl}</p>
+        </div>
+      `,
+    })
+  } catch (emailError) {
+    console.error("Failed to send invite email:", emailError)
+    // Don't fail the invite if email fails - the invite is still created
+  }
+
   revalidatePath("/", "layout")
   return { data }
 }
 
-export async function acceptInvite(inviteId: string) {
+export async function acceptInvite(token: string) {
   const supabase = await createClient()
   const {
     data: { user },
@@ -500,24 +532,31 @@ export async function acceptInvite(inviteId: string) {
     return { error: "Not authenticated" }
   }
 
-  // Get invite
+  // Get invite by token
   const { data: invite } = await supabase
     .from("org_invites")
     .select("*")
-    .eq("id", inviteId)
+    .eq("token", token)
     .eq("email", user.email.toLowerCase())
     .gt("expires_at", new Date().toISOString())
     .single()
 
   if (!invite) {
-    return { error: "Invalid or expired invite" }
+    return { error: "Invalid or expired invite, or email does not match" }
   }
 
-  // Check if already a member of any org
-  const { data: existingMembership } = await supabase.from("org_members").select("id").eq("user_id", user.id).single()
+  // Check if already a member of this org
+  const { data: existingMembership } = await supabase
+    .from("org_members")
+    .select("id")
+    .eq("user_id", user.id)
+    .eq("org_id", invite.org_id)
+    .single()
 
   if (existingMembership) {
-    return { error: "You are already part of an organization" }
+    // Already a member, just delete the invite and redirect
+    await supabase.from("org_invites").delete().eq("id", invite.id)
+    return { success: true }
   }
 
   // Add as member
@@ -532,7 +571,7 @@ export async function acceptInvite(inviteId: string) {
   }
 
   // Delete invite
-  await supabase.from("org_invites").delete().eq("id", inviteId)
+  await supabase.from("org_invites").delete().eq("id", invite.id)
 
   revalidatePath("/", "layout")
   return { success: true }
