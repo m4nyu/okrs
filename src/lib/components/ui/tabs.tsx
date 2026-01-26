@@ -3,18 +3,6 @@
 import * as React from "react"
 import { cn } from "@/lib/utils"
 
-const Tabs = React.forwardRef<
-  HTMLDivElement,
-  React.HTMLAttributes<HTMLDivElement> & {
-    defaultValue?: string
-    value?: string
-    onValueChange?: (value: string) => void
-  }
->(({ className, ...props }, ref) => (
-  <div ref={ref} data-slot="tabs" className={cn("flex flex-col gap-2", className)} {...props} />
-))
-Tabs.displayName = "Tabs"
-
 const TabsList = React.forwardRef<HTMLDivElement, React.HTMLAttributes<HTMLDivElement>>(
   ({ className, ...props }, ref) => (
     <div
@@ -46,11 +34,4 @@ const TabsTrigger = React.forwardRef<
 ))
 TabsTrigger.displayName = "TabsTrigger"
 
-const TabsContent = React.forwardRef<HTMLDivElement, React.HTMLAttributes<HTMLDivElement> & { value?: string }>(
-  ({ className, ...props }, ref) => (
-    <div ref={ref} data-slot="tabs-content" className={cn("flex-1 outline-none", className)} {...props} />
-  )
-)
-TabsContent.displayName = "TabsContent"
-
-export { Tabs, TabsList, TabsTrigger, TabsContent }
+export { TabsList, TabsTrigger }

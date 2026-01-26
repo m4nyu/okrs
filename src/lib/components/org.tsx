@@ -4,7 +4,7 @@ import { Check, ChevronDown, Loader2, Plus, X } from "lucide-react"
 import { useRouter } from "next/navigation"
 import type React from "react"
 import { useEffect, useState } from "react"
-import { Drawer, DrawerContent, DrawerHeader, DrawerTitle } from "@/lib/components/ui/drawer"
+import { Drawer, DrawerContent, DrawerHeader, DrawerTitle, DrawerDescription } from "@/lib/components/ui/drawer"
 import { ScrollArea } from "@/lib/components/ui/scroll-area"
 import { TabsList, TabsTrigger } from "@/lib/components/ui/tabs"
 import { useIsMobile } from "@/lib/hooks/use-mobile"
@@ -244,7 +244,6 @@ export function OrgSettings({
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState("")
   const [success, setSuccess] = useState("")
-  const [linkCopied, setLinkCopied] = useState(false)
   const [orgName, setOrgName] = useState(org.name)
   const [savingName, setSavingName] = useState(false)
   const [checkingName, setCheckingName] = useState(false)
@@ -342,13 +341,6 @@ export function OrgSettings({
     const result = await onUpdateSettings({ auto_join_domain: !org.auto_join_domain })
     if (result.error) setError(result.error)
     setLoading(false)
-  }
-
-  function copyInviteLink() {
-    const link = `${window.location.origin}?invite=${org.id}`
-    navigator.clipboard.writeText(link)
-    setLinkCopied(true)
-    setTimeout(() => setLinkCopied(false), 2000)
   }
 
   async function handleSaveMember(memberId: string, originalRole: "owner" | "admin" | "member") {
@@ -535,19 +527,6 @@ export function OrgSettings({
               </button>
             </div>
           </form>
-        </div>
-
-        <div className="space-y-3">
-          <label className="text-[10px] text-muted-foreground/70 uppercase tracking-wide">Link</label>
-          <div
-            onClick={copyInviteLink}
-            className="flex items-center justify-between h-9 border border-border bg-muted/30 px-3 rounded-md cursor-pointer hover:bg-muted/50 transition-colors"
-          >
-            <span className="text-sm text-muted-foreground truncate">
-              {typeof window !== "undefined" ? window.location.origin : ""}?invite={org.id.slice(0, 8)}...
-            </span>
-            <span className="text-xs text-muted-foreground ml-2 flex-shrink-0">{linkCopied ? "copied!" : "copy"}</span>
-          </div>
         </div>
 
         <div className="space-y-3">
@@ -745,6 +724,130 @@ export function OrgSettings({
         </div>
         {content}
       </div>
+    </div>
+  )
+}
+
+interface UserMenuProps {
+  email: string
+  onSignOut: () => void
+  openUp?: boolean
+}
+
+export function UserMenu({ email, onSignOut, openUp }: UserMenuProps) {
+  const isMobile = useIsMobile()
+  const [open, setOpen] = useState(false)
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false)
+  const [deleting, setDeleting] = useState(false)
+  const [deleteError, setDeleteError] = useState("")
+
+  async function handleDeleteAccount() {
+    setDeleting(true)
+    setDeleteError("")
+    try {
+      const res = await fetch("/api/auth/delete", { method: "DELETE" })
+      const data = await res.json()
+      if (data.error) {
+        setDeleteError(data.error)
+        setDeleting(false)
+        return
+      }
+      window.location.href = "/login"
+    } catch {
+      setDeleteError("Failed to delete account")
+      setDeleting(false)
+    }
+  }
+
+  const deleteContent = (
+    <div className="space-y-4">
+      <p className="text-sm text-muted-foreground">Are you sure? This cannot be undone.</p>
+      {deleteError && <p className="text-xs text-red-500">{deleteError}</p>}
+      <div className="flex justify-end gap-3">
+        <button
+          onClick={() => setShowDeleteConfirm(false)}
+          className="px-4 py-2 text-sm text-muted-foreground hover:text-foreground"
+        >
+          cancel
+        </button>
+        <button
+          onClick={handleDeleteAccount}
+          disabled={deleting}
+          className="px-4 py-2 bg-red-500 text-white text-sm disabled:opacity-50 hover:bg-red-600"
+        >
+          {deleting ? "deleting..." : "delete"}
+        </button>
+      </div>
+    </div>
+  )
+
+  if (showDeleteConfirm) {
+    if (isMobile) {
+      return (
+        <Drawer open onOpenChange={(open) => !open && setShowDeleteConfirm(false)}>
+          <DrawerContent>
+            <DrawerHeader className="select-none">
+              <DrawerTitle className="text-red-500">Delete Account</DrawerTitle>
+              <DrawerDescription className="sr-only">Confirm account deletion</DrawerDescription>
+            </DrawerHeader>
+            <div className="px-4 pb-6">{deleteContent}</div>
+          </DrawerContent>
+        </Drawer>
+      )
+    }
+
+    return (
+      <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4" onClick={() => setShowDeleteConfirm(false)}>
+        <div className="w-full max-w-xs border border-border bg-background p-5" onClick={(e) => e.stopPropagation()}>
+          <div className="flex justify-between items-center mb-4 select-none">
+            <span className="font-medium text-sm text-red-500">Delete Account</span>
+            <button onClick={() => setShowDeleteConfirm(false)} className="text-muted-foreground hover:text-foreground">
+              <X className="h-4 w-4" />
+            </button>
+          </div>
+          {deleteContent}
+        </div>
+      </div>
+    )
+  }
+
+  return (
+    <div className="relative" data-user-menu>
+      <button
+        onClick={() => setOpen(!open)}
+        className="flex items-center gap-1.5 hover:bg-muted/50 rounded-md px-2 py-1.5 -mr-2 transition-colors text-xs text-muted-foreground hover:text-foreground"
+      >
+        <span>{email}</span>
+        <ChevronDown className={`h-3 w-3 transition-transform ${open ? "rotate-180" : ""}`} />
+      </button>
+
+      {open && (
+        <>
+          <div className="fixed inset-0 z-40" onClick={() => setOpen(false)} />
+          <div
+            className={`absolute min-w-[120px] bg-background border border-border rounded-md shadow-lg z-50 py-1 flex ${openUp ? "bottom-full right-0 mb-1 flex-col-reverse" : "top-full right-0 mt-1 flex-col"}`}
+          >
+            <button
+              onClick={() => {
+                setOpen(false)
+                onSignOut()
+              }}
+              className="px-3 py-2 w-full hover:bg-muted/50 transition-colors text-xs text-left text-muted-foreground hover:text-foreground"
+            >
+              sign out
+            </button>
+            <button
+              onClick={() => {
+                setOpen(false)
+                setShowDeleteConfirm(true)
+              }}
+              className="px-3 py-2 w-full hover:bg-muted/50 transition-colors text-xs text-left text-red-400 hover:text-red-500"
+            >
+              delete account
+            </button>
+          </div>
+        </>
+      )}
     </div>
   )
 }
