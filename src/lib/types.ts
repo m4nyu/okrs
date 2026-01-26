@@ -25,8 +25,6 @@ export interface Objective {
   start_date?: string
   end_date: string
   status: "active" | "completed" | "cancelled"
-  share_token?: string
-  is_public: boolean
   created_at: string
   updated_at: string
   key_results: KeyResult[]
