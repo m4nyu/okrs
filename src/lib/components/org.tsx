@@ -3,7 +3,7 @@
 import { Check, ChevronDown, Loader2, Plus, X } from "lucide-react"
 import { useRouter } from "next/navigation"
 import type React from "react"
-import { useEffect, useState } from "react"
+import { useEffect, useRef, useState } from "react"
 import { Drawer, DrawerContent, DrawerHeader, DrawerTitle, DrawerDescription } from "@/lib/components/ui/drawer"
 import { ScrollArea } from "@/lib/components/ui/scroll-area"
 import { TabsList, TabsTrigger } from "@/lib/components/ui/tabs"
@@ -30,12 +30,20 @@ const ORG_COLORS = [
   "bg-rose-500",
 ]
 
+// Cache org colors to avoid recalculation
+const colorCache = new Map<string, string>()
+
 function getOrgColor(name: string): string {
+  const cached = colorCache.get(name)
+  if (cached) return cached
+
   let hash = 0
   for (let i = 0; i < name.length; i++) {
     hash = name.charCodeAt(i) + ((hash << 5) - hash)
   }
-  return ORG_COLORS[Math.abs(hash) % ORG_COLORS.length]
+  const color = ORG_COLORS[Math.abs(hash) % ORG_COLORS.length]
+  colorCache.set(name, color)
+  return color
 }
 
 function getOrgInitials(name: string): string {
@@ -238,12 +246,20 @@ export function OrgSettings({
   highlightOrgName,
 }: OrgSettingsProps) {
   const isMobile = useIsMobile()
+  const successTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const [tab, setTab] = useState("members")
   const [inviteEmail, setInviteEmail] = useState("")
   const [inviteRole, setInviteRole] = useState<"owner" | "admin" | "member">("member")
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState("")
   const [success, setSuccess] = useState("")
+
+  // Cleanup timeout on unmount
+  useEffect(() => {
+    return () => {
+      if (successTimeoutRef.current) clearTimeout(successTimeoutRef.current)
+    }
+  }, [])
   const [orgName, setOrgName] = useState(org.name)
   const [savingName, setSavingName] = useState(false)
   const [checkingName, setCheckingName] = useState(false)
@@ -314,7 +330,8 @@ export function OrgSettings({
     } else {
       setSuccess(`Invited ${inviteEmail}`)
       setInviteEmail("")
-      setTimeout(() => setSuccess(""), 3000)
+      if (successTimeoutRef.current) clearTimeout(successTimeoutRef.current)
+      successTimeoutRef.current = setTimeout(() => setSuccess(""), 3000)
     }
     setLoading(false)
   }
