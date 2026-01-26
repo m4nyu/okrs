@@ -1,4 +1,4 @@
-import { describe, it, expect } from "vitest"
+import { describe, expect, it } from "vitest"
 
 describe("types", () => {
   it("exports createObjectiveSchema", async () => {
@@ -14,9 +14,7 @@ describe("types", () => {
       title: "Test Objective",
       description: "This is a test description for the objective",
       endDate: "2025-12-31",
-      keyResults: [
-        { title: "KR1", targetValue: 100, startValue: 0, unit: "%" }
-      ]
+      keyResults: [{ title: "KR1", targetValue: 100, startValue: 0, unit: "%" }],
     }
 
     const result = createObjectiveSchema.safeParse(valid)
@@ -30,7 +28,7 @@ describe("types", () => {
       title: "",
       description: "short",
       endDate: "invalid",
-      keyResults: []
+      keyResults: [],
     }
 
     const result = createObjectiveSchema.safeParse(invalid)
