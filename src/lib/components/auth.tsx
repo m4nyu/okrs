@@ -1,6 +1,6 @@
 "use client"
 
-import { Monitor, Moon, Sun, Target } from "lucide-react"
+import { Check, Loader2, Monitor, Moon, Sun, Target, X } from "lucide-react"
 import { useEffect, useRef, useState } from "react"
 import { Button } from "@/lib/components/ui/button"
 import { DottedGlowBackground } from "@/lib/components/ui/dotted-glow-background"
@@ -65,8 +65,27 @@ export function AuthForm() {
 function ThemeBtn() {
   const [t, setT] = useState<"light" | "dark" | "system">("system")
   const [open, setOpen] = useState(false)
+
+  function getStoredTheme(): "light" | "dark" | "system" | null {
+    try {
+      const store = JSON.parse(localStorage.getItem("okr") || "{}")
+      return store.state?.theme || null
+    } catch {
+      return null
+    }
+  }
+
+  function setStoredTheme(theme: "light" | "dark" | "system") {
+    try {
+      const store = JSON.parse(localStorage.getItem("okr") || '{"state":{},"version":0}')
+      store.state = store.state || {}
+      store.state.theme = theme
+      localStorage.setItem("okr", JSON.stringify(store))
+    } catch {}
+  }
+
   useEffect(() => {
-    const s = localStorage.getItem("theme") as "light" | "dark" | "system" | null
+    const s = getStoredTheme()
     if (s) {
       setT(s)
       apply(s)
@@ -88,7 +107,7 @@ function ThemeBtn() {
   }
   function select(v: "light" | "dark" | "system") {
     setT(v)
-    localStorage.setItem("theme", v)
+    setStoredTheme(v)
     apply(v)
     setOpen(false)
   }
@@ -122,13 +141,21 @@ function ThemeBtn() {
   )
 }
 
+function isValidEmail(email: string) {
+  return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)
+}
+
 export function LoginForm({ className, ...props }: React.ComponentProps<"form">) {
   const [step, setStep] = useState<"email" | "otp">("email")
   const [email, setEmail] = useState("")
+  const [emailTouched, setEmailTouched] = useState(false)
   const [otp, setOtp] = useState(["", "", "", "", "", ""])
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState("")
   const inputRefs = useRef<(HTMLInputElement | null)[]>([])
+
+  const emailValid = isValidEmail(email)
+  const showEmailError = emailTouched && email && !emailValid
 
   useEffect(() => {
     if (step === "otp") {
@@ -141,10 +168,14 @@ export function LoginForm({ className, ...props }: React.ComponentProps<"form">)
     if (!email) return
     setLoading(true)
     setError("")
-    const supabase = createClient()
-    const { error } = await supabase.auth.signInWithOtp({ email })
-    if (error) {
-      setError(error.message)
+    const res = await fetch("/api/auth/otp", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ email }),
+    })
+    const data = await res.json()
+    if (data.error) {
+      setError(data.error)
     } else {
       setStep("otp")
     }
@@ -154,18 +185,20 @@ export function LoginForm({ className, ...props }: React.ComponentProps<"form">)
   async function verifyOtp(code: string) {
     setLoading(true)
     setError("")
-    const supabase = createClient()
-    const { error } = await supabase.auth.verifyOtp({
-      email,
-      token: code,
-      type: "email",
+    const res = await fetch("/api/auth/otp", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ email, code }),
     })
-    if (error) {
-      setError(error.message)
+    const data = await res.json()
+    if (data.error) {
+      setError(data.error)
       setOtp(["", "", "", "", "", ""])
       inputRefs.current[0]?.focus()
+      setLoading(false)
+    } else if (data.redirectUrl) {
+      window.location.href = data.redirectUrl
     }
-    setLoading(false)
   }
 
   function handleOtpChange(index: number, value: string) {
@@ -205,6 +238,7 @@ export function LoginForm({ className, ...props }: React.ComponentProps<"form">)
       provider,
       options: {
         redirectTo: `${window.location.origin}/api/auth/callback`,
+        queryParams: { prompt: provider === "github" ? "consent" : "select_account" },
       },
     })
     if (error) {
@@ -267,15 +301,26 @@ export function LoginForm({ className, ...props }: React.ComponentProps<"form">)
       <FieldGroup>
         <Field>
           <FieldLabel htmlFor="email">Email</FieldLabel>
-          <Input
-            id="email"
-            type="email"
-            placeholder="you@company.com"
-            value={email}
-            onChange={(e) => setEmail(e.target.value)}
-            disabled={loading}
-            required
-          />
+          <div className="relative">
+            <Input
+              id="email"
+              type="email"
+              placeholder="you@company.com"
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+              onBlur={() => setEmailTouched(true)}
+              disabled={loading}
+              required
+              aria-invalid={showEmailError || undefined}
+              className="pr-10"
+            />
+            <div className="absolute right-3 top-1/2 -translate-y-1/2">
+              {email && !emailValid && !showEmailError && <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />}
+              {email && emailValid && <Check className="h-4 w-4 text-emerald-500" />}
+              {showEmailError && <X className="h-4 w-4 text-destructive" />}
+            </div>
+          </div>
+          {showEmailError && <p className="text-xs text-destructive mt-1">Please enter a valid email address</p>}
         </Field>
         {error && <p className="text-sm text-destructive text-center">{error}</p>}
         <Field>
