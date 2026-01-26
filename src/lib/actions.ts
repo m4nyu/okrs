@@ -23,6 +23,18 @@ export async function createObjectiveWithKeyResults(payload: unknown, orgId: str
     return { error: "Not authenticated" }
   }
 
+  // Verify user is member of this org
+  const { data: membership } = await supabase
+    .from("org_members")
+    .select("role")
+    .eq("user_id", user.id)
+    .eq("org_id", orgId)
+    .single()
+
+  if (!membership) {
+    return { error: "Not authorized for this organization" }
+  }
+
   // Create objective
   const { data: objective, error: objError } = await supabase
     .from("objectives")
