@@ -145,21 +145,31 @@ export const DottedGlowBackground = ({
     const container = containerRef.current
     if (!el || !container) return
 
-    const ctx = el.getContext("2d")
+    const ctx = el.getContext("2d", { alpha: true })
     if (!ctx) return
 
     let raf = 0
     let stopped = false
-    let paused = document.hidden // Start paused if tab not visible
+    let paused = document.hidden
 
-    const dpr = Math.max(1, Math.min(2, window.devicePixelRatio || 1)) // Cap at 2x for performance
+    // Target 30fps for smooth animation (33ms between frames)
+    const FRAME_INTERVAL = 33
+    let lastFrame = 0
+
+    const dpr = Math.max(1, Math.min(2, window.devicePixelRatio || 1))
+
+    // Cache dimensions to avoid getBoundingClientRect every frame
+    let cachedWidth = 0
+    let cachedHeight = 0
 
     const resize = () => {
-      const { width, height } = container.getBoundingClientRect()
-      el.width = Math.max(1, Math.floor(width * dpr))
-      el.height = Math.max(1, Math.floor(height * dpr))
-      el.style.width = `${Math.floor(width)}px`
-      el.style.height = `${Math.floor(height)}px`
+      const rect = container.getBoundingClientRect()
+      cachedWidth = rect.width
+      cachedHeight = rect.height
+      el.width = Math.max(1, Math.floor(cachedWidth * dpr))
+      el.height = Math.max(1, Math.floor(cachedHeight * dpr))
+      el.style.width = `${Math.floor(cachedWidth)}px`
+      el.style.height = `${Math.floor(cachedHeight)}px`
       ctx.setTransform(dpr, 0, 0, dpr, 0, 0)
     }
 
@@ -167,91 +177,79 @@ export const DottedGlowBackground = ({
     ro.observe(container)
     resize()
 
-    // Precompute dot metadata for a medium-sized grid and regenerate on resize
+    // Precompute dot data - use larger gap on bigger screens
     let dots: { x: number; y: number; phase: number; speed: number }[] = []
 
     const regenDots = () => {
       dots = []
-      const { width, height } = container.getBoundingClientRect()
-      const cols = Math.ceil(width / gap) + 2
-      const rows = Math.ceil(height / gap) + 2
+      // Increase gap on larger screens to reduce dot count
+      const effectiveGap = cachedWidth > 1200 ? gap * 1.5 : gap
+      const cols = Math.ceil(cachedWidth / effectiveGap) + 2
+      const rows = Math.ceil(cachedHeight / effectiveGap) + 2
       const min = Math.min(speedMin, speedMax)
       const max = Math.max(speedMin, speedMax)
+      const span = Math.max(max - min, 0)
+
       for (let i = -1; i < cols; i++) {
         for (let j = -1; j < rows; j++) {
-          const x = i * gap + (j % 2 === 0 ? 0 : gap * 0.5)
-          const y = j * gap
-          const phase = Math.random() * Math.PI * 2
-          const span = Math.max(max - min, 0)
-          const speed = min + Math.random() * span
-          dots.push({ x, y, phase, speed })
+          dots.push({
+            x: i * effectiveGap + (j % 2 === 0 ? 0 : effectiveGap * 0.5),
+            y: j * effectiveGap,
+            phase: Math.random() * Math.PI * 2,
+            speed: min + Math.random() * span,
+          })
         }
       }
     }
 
     regenDots()
 
-    let last = performance.now()
-
     const draw = (now: number) => {
       if (stopped) return
-      if (paused) {
-        raf = requestAnimationFrame(draw)
-        return
-      }
 
-      last = now
-      const { width, height } = container.getBoundingClientRect()
+      raf = requestAnimationFrame(draw)
+
+      // Skip if paused or not enough time elapsed (throttle to ~15fps)
+      if (paused || now - lastFrame < FRAME_INTERVAL) return
+      lastFrame = now
 
       ctx.clearRect(0, 0, el.width, el.height)
-      ctx.globalAlpha = opacity
 
-      // optional subtle background fade for depth (defaults to 0 = transparent)
+      // Skip background gradient if not needed
       if (backgroundOpacity > 0) {
         const grad = ctx.createRadialGradient(
-          width * 0.5,
-          height * 0.4,
-          Math.min(width, height) * 0.1,
-          width * 0.5,
-          height * 0.5,
-          Math.max(width, height) * 0.7
+          cachedWidth * 0.5, cachedHeight * 0.4,
+          Math.min(cachedWidth, cachedHeight) * 0.1,
+          cachedWidth * 0.5, cachedHeight * 0.5,
+          Math.max(cachedWidth, cachedHeight) * 0.7
         )
         grad.addColorStop(0, "rgba(0,0,0,0)")
-        grad.addColorStop(1, `rgba(0,0,0,${Math.min(Math.max(backgroundOpacity, 0), 1)})`)
-        ctx.fillStyle = grad as unknown as CanvasGradient
-        ctx.fillRect(0, 0, width, height)
+        grad.addColorStop(1, `rgba(0,0,0,${backgroundOpacity})`)
+        ctx.fillStyle = grad
+        ctx.fillRect(0, 0, cachedWidth, cachedHeight)
       }
 
-      // Disable shadow globally for better performance
-      ctx.shadowColor = "transparent"
-      ctx.shadowBlur = 0
-
-      ctx.save()
       ctx.fillStyle = resolvedColor
-
       const time = (now / 1000) * Math.max(speedScale, 0)
+      const baseOpacity = opacity
+
       for (let i = 0; i < dots.length; i++) {
         const d = dots[i]
         const mod = (time * d.speed + d.phase) % 2
-        const lin = mod < 1 ? mod : 2 - mod
-        const a = 0.25 + 0.55 * lin
+        const a = 0.25 + 0.55 * (mod < 1 ? mod : 2 - mod)
 
-        ctx.globalAlpha = a * opacity
+        ctx.globalAlpha = a * baseOpacity
         ctx.beginPath()
         ctx.arc(d.x, d.y, radius, 0, Math.PI * 2)
         ctx.fill()
       }
-      ctx.restore()
-
-      raf = requestAnimationFrame(draw)
     }
 
-    const handleResize = () => {
+    const handleResize = debounce(() => {
       resize()
       regenDots()
-    }
+    }, 150)
 
-    // Pause animation when tab is not visible
     const handleVisibility = () => {
       paused = document.hidden
     }
