@@ -228,6 +228,7 @@ interface OrgSettingsProps {
     auto_join_domain?: boolean
     domain?: string | null
   }) => Promise<{ error?: string }>
+  onDeleteOrg: () => Promise<{ error?: string }>
   highlightOrgName?: boolean
 }
 
@@ -243,6 +244,7 @@ export function OrgSettings({
   onUpdateMemberName,
   onCancelInvite,
   onUpdateSettings,
+  onDeleteOrg,
   highlightOrgName,
 }: OrgSettingsProps) {
   const isMobile = useIsMobile()
@@ -270,8 +272,24 @@ export function OrgSettings({
   const [editingDomain, setEditingDomain] = useState(false)
   const [domainValue, setDomainValue] = useState(org.domain || "")
   const [domainError, setDomainError] = useState("")
+  const [confirmDelete, setConfirmDelete] = useState(false)
+  const [deleting, setDeleting] = useState(false)
+  const router = useRouter()
 
   const isAdmin = currentUserRole === "owner" || currentUserRole === "admin"
+  const isOwner = currentUserRole === "owner"
+
+  async function handleDeleteOrg() {
+    setDeleting(true)
+    const result = await onDeleteOrg()
+    if (result.error) {
+      setError(result.error)
+      setDeleting(false)
+      setConfirmDelete(false)
+    } else {
+      router.push("/")
+    }
+  }
   const nameChanged = orgName.trim() !== org.name && orgName.trim().length > 0
 
   useEffect(() => {
@@ -692,10 +710,35 @@ export function OrgSettings({
                 )}
                 {nameChanged && !checkingName && nameAvailable === false && <X className="h-3.5 w-3.5 text-red-500" />}
                 {savingName && <span className="text-xs text-muted-foreground">saving...</span>}
+                {isOwner && (
+                  <button onClick={() => setConfirmDelete(true)} className="text-xs text-red-500">
+                    delete
+                  </button>
+                )}
               </div>
             </DrawerTitle>
           </DrawerHeader>
           {content}
+          <Drawer open={confirmDelete} onOpenChange={setConfirmDelete}>
+            <DrawerContent>
+              <DrawerHeader>
+                <DrawerTitle>Delete organization</DrawerTitle>
+                <DrawerDescription>Delete "{org.name}" and all its data?</DrawerDescription>
+              </DrawerHeader>
+              <div className="p-4 flex flex-col gap-2">
+                <button
+                  onClick={handleDeleteOrg}
+                  disabled={deleting}
+                  className="w-full py-2 text-sm bg-red-500 text-white disabled:opacity-50"
+                >
+                  {deleting ? "deleting..." : "delete"}
+                </button>
+                <button onClick={() => setConfirmDelete(false)} className="w-full py-2 text-sm text-muted-foreground">
+                  cancel
+                </button>
+              </div>
+            </DrawerContent>
+          </Drawer>
         </DrawerContent>
       </Drawer>
     )
@@ -732,6 +775,14 @@ export function OrgSettings({
             <X className="h-3.5 w-3.5 text-red-500 flex-shrink-0" />
           )}
           {savingName && <span className="text-xs text-muted-foreground flex-shrink-0">saving...</span>}
+          {isOwner && (
+            <button
+              onClick={() => setConfirmDelete(true)}
+              className="text-xs text-red-500 hover:text-red-400 flex-shrink-0"
+            >
+              delete
+            </button>
+          )}
           <button
             onClick={onClose}
             className="text-xs text-muted-foreground hover:text-foreground flex items-center gap-1.5 flex-shrink-0"
@@ -741,6 +792,25 @@ export function OrgSettings({
         </div>
         {content}
       </div>
+      {confirmDelete && (
+        <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/50 p-4" onClick={() => setConfirmDelete(false)}>
+          <div className="w-full max-w-xs border border-border bg-background p-4" onClick={(e) => e.stopPropagation()}>
+            <p className="text-sm mb-4">Delete "{org.name}" and all its data?</p>
+            <div className="flex gap-2 justify-end">
+              <button onClick={() => setConfirmDelete(false)} className="px-3 py-1.5 text-xs text-muted-foreground hover:text-foreground">
+                cancel
+              </button>
+              <button
+                onClick={handleDeleteOrg}
+                disabled={deleting}
+                className="px-3 py-1.5 text-xs bg-red-500 text-white hover:bg-red-600 disabled:opacity-50"
+              >
+                {deleting ? "deleting..." : "delete"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 }

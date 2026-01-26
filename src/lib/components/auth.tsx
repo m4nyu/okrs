@@ -196,8 +196,8 @@ export function LoginForm({ className, ...props }: React.ComponentProps<"form">)
       setOtp(["", "", "", "", "", ""])
       inputRefs.current[0]?.focus()
       setLoading(false)
-    } else if (data.redirectUrl) {
-      window.location.href = data.redirectUrl
+    } else if (data.verified) {
+      window.location.href = "/"
     }
   }
 
