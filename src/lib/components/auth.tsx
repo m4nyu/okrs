@@ -315,7 +315,9 @@ export function LoginForm({ className, ...props }: React.ComponentProps<"form">)
               className="pr-10"
             />
             <div className="absolute right-3 top-1/2 -translate-y-1/2">
-              {email && !emailValid && !showEmailError && <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />}
+              {email && !emailValid && !showEmailError && (
+                <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />
+              )}
               {email && emailValid && <Check className="h-4 w-4 text-emerald-500" />}
               {showEmailError && <X className="h-4 w-4 text-destructive" />}
             </div>
