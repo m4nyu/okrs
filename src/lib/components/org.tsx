@@ -244,7 +244,6 @@ export function OrgSettings({
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState("")
   const [success, setSuccess] = useState("")
-  const [linkCopied, setLinkCopied] = useState(false)
   const [orgName, setOrgName] = useState(org.name)
   const [savingName, setSavingName] = useState(false)
   const [checkingName, setCheckingName] = useState(false)
@@ -342,13 +341,6 @@ export function OrgSettings({
     const result = await onUpdateSettings({ auto_join_domain: !org.auto_join_domain })
     if (result.error) setError(result.error)
     setLoading(false)
-  }
-
-  function copyInviteLink() {
-    const link = `${window.location.origin}?invite=${org.id}`
-    navigator.clipboard.writeText(link)
-    setLinkCopied(true)
-    setTimeout(() => setLinkCopied(false), 2000)
   }
 
   async function handleSaveMember(memberId: string, originalRole: "owner" | "admin" | "member") {
@@ -535,19 +527,6 @@ export function OrgSettings({
               </button>
             </div>
           </form>
-        </div>
-
-        <div className="space-y-3">
-          <label className="text-[10px] text-muted-foreground/70 uppercase tracking-wide">Link</label>
-          <div
-            onClick={copyInviteLink}
-            className="flex items-center justify-between h-9 border border-border bg-muted/30 px-3 rounded-md cursor-pointer hover:bg-muted/50 transition-colors"
-          >
-            <span className="text-sm text-muted-foreground truncate">
-              {typeof window !== "undefined" ? window.location.origin : ""}?invite={org.id.slice(0, 8)}...
-            </span>
-            <span className="text-xs text-muted-foreground ml-2 flex-shrink-0">{linkCopied ? "copied!" : "copy"}</span>
-          </div>
         </div>
 
         <div className="space-y-3">
