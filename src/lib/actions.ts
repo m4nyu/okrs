@@ -392,6 +392,23 @@ export async function generateAndCreateOrg() {
 }
 
 export async function getOrgMembers(orgId: string) {
+  const supabase = await createClient()
+  const {
+    data: { user },
+  } = await supabase.auth.getUser()
+
+  if (!user) return []
+
+  // Verify user is member of this org
+  const { data: membership } = await supabase
+    .from("org_members")
+    .select("role")
+    .eq("user_id", user.id)
+    .eq("org_id", orgId)
+    .single()
+
+  if (!membership) return []
+
   const { createAdminClient } = await import("@/lib/db/server")
   const adminClient = createAdminClient()
 
@@ -420,6 +437,21 @@ export async function getOrgMembers(orgId: string) {
 
 export async function getOrgInvites(orgId: string) {
   const supabase = await createClient()
+  const {
+    data: { user },
+  } = await supabase.auth.getUser()
+
+  if (!user) return []
+
+  // Verify user is admin/owner of this org
+  const { data: membership } = await supabase
+    .from("org_members")
+    .select("role")
+    .eq("user_id", user.id)
+    .eq("org_id", orgId)
+    .single()
+
+  if (!membership || (membership.role !== "owner" && membership.role !== "admin")) return []
 
   const { data, error } = await supabase
     .from("org_invites")
@@ -432,7 +464,7 @@ export async function getOrgInvites(orgId: string) {
   return data
 }
 
-export async function inviteToOrg(email: string, role: "owner" | "admin" | "member" = "member") {
+export async function inviteToOrg(orgId: string, email: string, role: "owner" | "admin" | "member" = "member") {
   const supabase = await createClient()
   const {
     data: { user },
@@ -442,11 +474,12 @@ export async function inviteToOrg(email: string, role: "owner" | "admin" | "memb
     return { error: "Not authenticated" }
   }
 
-  // Get user's org and check if they're admin/owner
+  // Verify user is admin/owner of this specific org
   const { data: membership } = await supabase
     .from("org_members")
-    .select("org_id, role, organizations(name)")
+    .select("role, organizations(name)")
     .eq("user_id", user.id)
+    .eq("org_id", orgId)
     .single()
 
   if (!membership || (membership.role !== "owner" && membership.role !== "admin")) {
@@ -462,7 +495,7 @@ export async function inviteToOrg(email: string, role: "owner" | "admin" | "memb
   const { data: existingInvite } = await supabase
     .from("org_invites")
     .select("id")
-    .eq("org_id", membership.org_id)
+    .eq("org_id", orgId)
     .eq("email", email.toLowerCase())
     .gt("expires_at", new Date().toISOString())
     .single()
@@ -477,7 +510,7 @@ export async function inviteToOrg(email: string, role: "owner" | "admin" | "memb
   const { data, error } = await supabase
     .from("org_invites")
     .insert({
-      org_id: membership.org_id,
+      org_id: orgId,
       email: email.toLowerCase(),
       role,
       invited_by: user.id,
@@ -577,7 +610,7 @@ export async function acceptInvite(token: string) {
   return { success: true }
 }
 
-export async function removeOrgMember(memberId: string) {
+export async function removeOrgMember(orgId: string, memberId: string) {
   const supabase = await createClient()
   const {
     data: { user },
@@ -587,19 +620,24 @@ export async function removeOrgMember(memberId: string) {
     return { error: "Not authenticated" }
   }
 
-  // Get user's org and check if they're admin/owner
-  const { data: membership } = await supabase.from("org_members").select("org_id, role").eq("user_id", user.id).single()
+  // Verify user is admin/owner of this specific org
+  const { data: membership } = await supabase
+    .from("org_members")
+    .select("role")
+    .eq("user_id", user.id)
+    .eq("org_id", orgId)
+    .single()
 
   if (!membership || (membership.role !== "owner" && membership.role !== "admin")) {
     return { error: "You don't have permission to remove members" }
   }
 
-  // Get target member
+  // Get target member from this specific org
   const { data: targetMember } = await supabase
     .from("org_members")
     .select("role, user_id")
     .eq("id", memberId)
-    .eq("org_id", membership.org_id)
+    .eq("org_id", orgId)
     .single()
 
   if (!targetMember) {
@@ -626,7 +664,7 @@ export async function removeOrgMember(memberId: string) {
   return { success: true }
 }
 
-export async function cancelInvite(inviteId: string) {
+export async function cancelInvite(orgId: string, inviteId: string) {
   const supabase = await createClient()
   const {
     data: { user },
@@ -636,14 +674,19 @@ export async function cancelInvite(inviteId: string) {
     return { error: "Not authenticated" }
   }
 
-  // Get user's org
-  const { data: membership } = await supabase.from("org_members").select("org_id, role").eq("user_id", user.id).single()
+  // Verify user is admin/owner of this specific org
+  const { data: membership } = await supabase
+    .from("org_members")
+    .select("role")
+    .eq("user_id", user.id)
+    .eq("org_id", orgId)
+    .single()
 
   if (!membership || (membership.role !== "owner" && membership.role !== "admin")) {
     return { error: "You don't have permission to cancel invites" }
   }
 
-  const { error } = await supabase.from("org_invites").delete().eq("id", inviteId).eq("org_id", membership.org_id)
+  const { error } = await supabase.from("org_invites").delete().eq("id", inviteId).eq("org_id", orgId)
 
   if (error) {
     return { error: error.message }
@@ -653,7 +696,7 @@ export async function cancelInvite(inviteId: string) {
   return { success: true }
 }
 
-export async function updateMemberName(memberId: string, displayName: string) {
+export async function updateMemberName(orgId: string, memberId: string, displayName: string) {
   const supabase = await createClient()
   const {
     data: { user },
@@ -667,22 +710,24 @@ export async function updateMemberName(memberId: string, displayName: string) {
   const { createAdminClient } = await import("@/lib/db/server")
   const adminClient = createAdminClient()
 
+  // Verify user is admin/owner of this specific org
   const { data: membership } = await adminClient
     .from("org_members")
-    .select("org_id, role")
+    .select("role")
     .eq("user_id", user.id)
+    .eq("org_id", orgId)
     .single()
 
   if (!membership || (membership.role !== "owner" && membership.role !== "admin")) {
     return { error: "You don't have permission to update member names" }
   }
 
-  // Get target member's user_id
+  // Get target member's user_id from this specific org
   const { data: targetMember } = await adminClient
     .from("org_members")
     .select("user_id")
     .eq("id", memberId)
-    .eq("org_id", membership.org_id)
+    .eq("org_id", orgId)
     .single()
 
   if (!targetMember) {
@@ -702,7 +747,7 @@ export async function updateMemberName(memberId: string, displayName: string) {
   return { success: true }
 }
 
-export async function transferOwnership(memberId: string) {
+export async function transferOwnership(orgId: string, memberId: string) {
   const supabase = await createClient()
   const {
     data: { user },
@@ -715,23 +760,24 @@ export async function transferOwnership(memberId: string) {
   const { createAdminClient } = await import("@/lib/db/server")
   const adminClient = createAdminClient()
 
-  // Check current user is the owner
+  // Check current user is the owner of this specific org
   const { data: currentMembership } = await adminClient
     .from("org_members")
-    .select("id, org_id, role")
+    .select("id, role")
     .eq("user_id", user.id)
+    .eq("org_id", orgId)
     .single()
 
   if (!currentMembership || currentMembership.role !== "owner") {
     return { error: "Only the owner can transfer ownership" }
   }
 
-  // Get the target member
+  // Get the target member from this specific org
   const { data: targetMember } = await adminClient
     .from("org_members")
     .select("id, role")
     .eq("id", memberId)
-    .eq("org_id", currentMembership.org_id)
+    .eq("org_id", orgId)
     .single()
 
   if (!targetMember) {
@@ -762,7 +808,7 @@ export async function transferOwnership(memberId: string) {
   return { success: true }
 }
 
-export async function updateMemberRole(memberId: string, newRole: "owner" | "admin" | "member") {
+export async function updateMemberRole(orgId: string, memberId: string, newRole: "owner" | "admin" | "member") {
   const supabase = await createClient()
   const {
     data: { user },
@@ -776,22 +822,24 @@ export async function updateMemberRole(memberId: string, newRole: "owner" | "adm
   const { createAdminClient } = await import("@/lib/db/server")
   const adminClient = createAdminClient()
 
+  // Verify user is admin/owner of this specific org
   const { data: membership } = await adminClient
     .from("org_members")
-    .select("org_id, role")
+    .select("role")
     .eq("user_id", user.id)
+    .eq("org_id", orgId)
     .single()
 
   if (!membership || (membership.role !== "owner" && membership.role !== "admin")) {
     return { error: "You don't have permission to update member roles" }
   }
 
-  // Get target member
+  // Get target member from this specific org
   const { data: targetMember } = await adminClient
     .from("org_members")
     .select("role, user_id")
     .eq("id", memberId)
-    .eq("org_id", membership.org_id)
+    .eq("org_id", orgId)
     .single()
 
   if (!targetMember) {
@@ -808,7 +856,7 @@ export async function updateMemberRole(memberId: string, newRole: "owner" | "adm
     const { count } = await adminClient
       .from("org_members")
       .select("*", { count: "exact", head: true })
-      .eq("org_id", membership.org_id)
+      .eq("org_id", orgId)
       .eq("role", "owner")
 
     if (count && count <= 1) {
