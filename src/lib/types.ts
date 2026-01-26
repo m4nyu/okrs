@@ -15,23 +15,19 @@ export const createObjectiveSchema = z.object({
   keyResults: z.array(keyResultSchema).max(10),
 })
 
-export type CreateObjectiveInput = z.infer<typeof createObjectiveSchema>
-export type KeyResultInput = z.infer<typeof keyResultSchema>
-
 // Database types
 export interface Objective {
   id: string
   user_id: string
+  org_id: string | null
   title: string
   description: string | null
-  start_date: string
+  start_date?: string
   end_date: string
   status: "active" | "completed" | "cancelled"
-  share_token: string
-  is_public: boolean
   created_at: string
   updated_at: string
-  key_results?: KeyResult[]
+  key_results: KeyResult[]
 }
 
 export interface KeyResult {
