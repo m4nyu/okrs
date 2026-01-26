@@ -1,6 +1,15 @@
 "use client"
 
-import { useEffect, useRef, useState } from "react"
+import { useCallback, useEffect, useRef, useState } from "react"
+
+// Debounce helper
+function debounce<T extends (...args: unknown[]) => void>(fn: T, ms: number): T {
+  let timer: ReturnType<typeof setTimeout> | null = null
+  return ((...args: unknown[]) => {
+    if (timer) clearTimeout(timer)
+    timer = setTimeout(() => fn(...args), ms)
+  }) as T
+}
 
 type DottedGlowBackgroundProps = {
   className?: string
@@ -117,10 +126,12 @@ export const DottedGlowBackground = ({
     const handleMql = () => compute()
     mql?.addEventListener?.("change", handleMql)
 
-    const mo = new MutationObserver(() => compute())
+    // Debounce MutationObserver to prevent excessive recomputation
+    const debouncedCompute = debounce(compute, 100)
+    const mo = new MutationObserver(debouncedCompute)
     mo.observe(document.documentElement, {
       attributes: true,
-      attributeFilter: ["class", "style"],
+      attributeFilter: ["class"],
     })
 
     return () => {
@@ -139,8 +150,9 @@ export const DottedGlowBackground = ({
 
     let raf = 0
     let stopped = false
+    let paused = document.hidden // Start paused if tab not visible
 
-    const dpr = Math.max(1, window.devicePixelRatio || 1)
+    const dpr = Math.max(1, Math.min(2, window.devicePixelRatio || 1)) // Cap at 2x for performance
 
     const resize = () => {
       const { width, height } = container.getBoundingClientRect()
@@ -167,19 +179,14 @@ export const DottedGlowBackground = ({
       const max = Math.max(speedMin, speedMax)
       for (let i = -1; i < cols; i++) {
         for (let j = -1; j < rows; j++) {
-          const x = i * gap + (j % 2 === 0 ? 0 : gap * 0.5) // offset every other row
+          const x = i * gap + (j % 2 === 0 ? 0 : gap * 0.5)
           const y = j * gap
-          // Randomize phase and speed slightly per dot
           const phase = Math.random() * Math.PI * 2
           const span = Math.max(max - min, 0)
-          const speed = min + Math.random() * span // configurable rad/s
+          const speed = min + Math.random() * span
           dots.push({ x, y, phase, speed })
         }
       }
-    }
-
-    const regenThrottled = () => {
-      regenDots()
     }
 
     regenDots()
@@ -188,7 +195,11 @@ export const DottedGlowBackground = ({
 
     const draw = (now: number) => {
       if (stopped) return
-      const _dt = (now - last) / 1000 // seconds
+      if (paused) {
+        raf = requestAnimationFrame(draw)
+        return
+      }
+
       last = now
       const { width, height } = container.getBoundingClientRect()
 
@@ -211,27 +222,19 @@ export const DottedGlowBackground = ({
         ctx.fillRect(0, 0, width, height)
       }
 
-      // animate dots
+      // Disable shadow globally for better performance
+      ctx.shadowColor = "transparent"
+      ctx.shadowBlur = 0
+
       ctx.save()
       ctx.fillStyle = resolvedColor
 
       const time = (now / 1000) * Math.max(speedScale, 0)
       for (let i = 0; i < dots.length; i++) {
         const d = dots[i]
-        // Linear triangle wave 0..1..0 for linear glow/dim
         const mod = (time * d.speed + d.phase) % 2
-        const lin = mod < 1 ? mod : 2 - mod // 0..1..0
-        const a = 0.25 + 0.55 * lin // 0.25..0.8 linearly
-
-        // draw glow when bright
-        if (a > 0.6) {
-          const glow = (a - 0.6) / 0.4 // 0..1
-          ctx.shadowColor = resolvedGlowColor
-          ctx.shadowBlur = 6 * glow
-        } else {
-          ctx.shadowColor = "transparent"
-          ctx.shadowBlur = 0
-        }
+        const lin = mod < 1 ? mod : 2 - mod
+        const a = 0.25 + 0.55 * lin
 
         ctx.globalAlpha = a * opacity
         ctx.beginPath()
@@ -245,16 +248,23 @@ export const DottedGlowBackground = ({
 
     const handleResize = () => {
       resize()
-      regenThrottled()
+      regenDots()
+    }
+
+    // Pause animation when tab is not visible
+    const handleVisibility = () => {
+      paused = document.hidden
     }
 
     window.addEventListener("resize", handleResize)
+    document.addEventListener("visibilitychange", handleVisibility)
     raf = requestAnimationFrame(draw)
 
     return () => {
       stopped = true
       cancelAnimationFrame(raf)
       window.removeEventListener("resize", handleResize)
+      document.removeEventListener("visibilitychange", handleVisibility)
       ro.disconnect()
     }
   }, [gap, radius, resolvedColor, resolvedGlowColor, opacity, backgroundOpacity, speedMin, speedMax, speedScale])
