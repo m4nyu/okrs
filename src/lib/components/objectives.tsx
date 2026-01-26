@@ -22,13 +22,13 @@ import {
 import React, { useCallback, useEffect, useState } from "react"
 import { CartesianGrid, Line, LineChart, XAxis, YAxis } from "recharts"
 import useSWR from "swr"
-import { OrgSettings, OrgSwitcher } from "@/lib/components/org"
+import { OrgSettings, OrgSwitcher, UserMenu } from "@/lib/components/org"
 import { ChartContainer, ChartTooltip } from "@/lib/components/ui/chart"
 import { Drawer, DrawerContent, DrawerHeader, DrawerTitle } from "@/lib/components/ui/drawer"
 import { ScrollArea } from "@/lib/components/ui/scroll-area"
 import { createClient } from "@/lib/db/client"
 import { useIsMobile } from "@/lib/hooks/use-mobile"
-import { useAppStore } from "@/lib/store"
+import { useStore, $ } from "@/lib/store"
 import type { KeyResult, Objective, ObjectiveWithProgress, Organization } from "@/lib/types"
 
 const CHART_COLORS = ["var(--chart-1)", "var(--chart-2)", "var(--chart-3)", "var(--chart-4)", "var(--chart-5)"]
@@ -96,7 +96,7 @@ function ThemeButton({
   mobileSignOut?: () => void
   mobileUserEmail?: string
 }) {
-  const { theme, setTheme } = useAppStore()
+  const theme = useStore(s => s.theme)
   const [open, setOpen] = useState(false)
 
   useEffect(() => {
@@ -107,10 +107,7 @@ function ThemeButton({
     }
   }, [theme])
 
-  const select = (v: "light" | "dark" | "system") => {
-    setTheme(v)
-    setOpen(false)
-  }
+  const select = (v: "light" | "dark" | "system") => { $.set("theme", v); setOpen(false) }
 
   const Icon = theme === "light" ? Sun : theme === "dark" ? Moon : Monitor
 
@@ -157,16 +154,17 @@ function ThemeButton({
             openUp
           />
         )}
-        <div className="flex items-center gap-3 text-xs text-muted-foreground">
-          {mobileUserEmail && <span className="max-w-[100px] truncate">{mobileUserEmail}</span>}
-          <button onClick={() => mobileSignOut?.()} className="hover:text-foreground">
-            sign out
-          </button>
-        </div>
+        {mobileUserEmail && mobileSignOut && (
+          <UserMenu
+            email={mobileUserEmail}
+            onSignOut={mobileSignOut}
+            openUp
+          />
+        )}
       </nav>
       <div className="hidden md:flex fixed bottom-4 right-4 z-40 select-none gap-1">
         <button
-          onClick={() => useAppStore.getState().openHelp()}
+          onClick={() => $.show("help")}
           className="w-7 h-7 flex items-center justify-center border border-border bg-background text-muted-foreground hover:text-foreground text-[10px] font-mono"
         >
           ?
@@ -206,7 +204,7 @@ function ProgressChart({
   hoveredObj: string | null
   setHoveredObj: (id: string | null) => void
 }) {
-  const { chartPeriod: period, setChartPeriod: setPeriod } = useAppStore()
+  const range = useStore(s => s.range)
 
   const getPeriodBounds = () => {
     const now = new Date()
@@ -218,7 +216,7 @@ function ProgressChart({
       if (created < earliestDate) earliestDate = created
     })
     let periodEnd: Date
-    switch (period) {
+    switch (range) {
       case "1M":
         periodEnd = new Date(earliestDate)
         periodEnd.setMonth(periodEnd.getMonth() + 1)
@@ -326,7 +324,7 @@ function ProgressChart({
     })
   }
 
-  const progressData = React.useMemo(() => generateProgressData(), [period, objectives])
+  const progressData = React.useMemo(() => generateProgressData(), [range, objectives])
 
   const chartConfig: Record<string, { label: string; color?: string }> = { date: { label: "Date" } }
   objectives.forEach((obj, idx) => {
@@ -346,13 +344,11 @@ function ProgressChart({
               {(["1M", "Q", "Y"] as const).map((p) => (
                 <button
                   key={p}
-                  onClick={() => setPeriod(p)}
-                  className={`px-1.5 py-0.5 transition-colors flex items-center gap-1 ${period === p ? "bg-foreground text-background" : "text-muted-foreground hover:text-foreground"}`}
+                  onClick={() => $.set("range", p)}
+                  className={`px-1.5 py-0.5 transition-colors flex items-center gap-1 ${range === p ? "bg-foreground text-background" : "text-muted-foreground hover:text-foreground"}`}
                 >
                   {p}
-                  <kbd
-                    className={`px-1 py-0.5 font-mono text-[10px] ${period === p ? "bg-background/20" : "bg-muted"}`}
-                  >
+                  <kbd className={`px-1 py-0.5 font-mono text-[10px] ${range === p ? "bg-background/20" : "bg-muted"}`}>
                     {p === "1M" ? "M" : p}
                   </kbd>
                 </button>
@@ -636,8 +632,8 @@ function ObjectiveModal({
       }
     }
     if (isEditing && editingObjective) {
-      const { updateObjectiveWithKeyResults } = await import("@/lib/actions")
-      await updateObjectiveWithKeyResults(
+      const { updateObjective } = await import("@/lib/actions")
+      await updateObjective(
         {
           id: editingObjective.id,
           title,
@@ -656,8 +652,8 @@ function ObjectiveModal({
         orgId
       )
     } else {
-      const { createObjectiveWithKeyResults } = await import("@/lib/actions")
-      await createObjectiveWithKeyResults(
+      const { createObjective } = await import("@/lib/actions")
+      await createObjective(
         {
           title,
           description,
@@ -931,13 +927,13 @@ function ReportModal({
       return
     }
     try {
-      const { updateKeyResultProgress } = await import("@/lib/actions")
+      const { updateProgress } = await import("@/lib/actions")
       let updatedCount = 0
       for (const kr of objective.key_results) {
         const newValue = values[kr.id]
         if (newValue !== kr.current_value) {
           updatedCount++
-          const result = await updateKeyResultProgress(kr.id, newValue, orgId, note || undefined)
+          const result = await updateProgress(kr.id, newValue, orgId, note || undefined)
           if (result.error) {
             setError(result.error)
             setLoading(false)
@@ -1217,45 +1213,7 @@ function HistoryModal({ objective, onClose }: { objective: ObjectiveWithProgress
 }
 
 export function Objectives({ user, org, orgRole, devMode, needsOrgName, userOrgs = [] }: Props) {
-  const {
-    showObjectiveModal,
-    showReportModal,
-    showOrgSettings,
-    showHelp,
-    showHistoryModal,
-    editingObjective,
-    reportingObjective,
-    historyObjective,
-    selectedIdx,
-    hoveredObjId,
-    expandedIds,
-    menuOpenId,
-    objectives: storeObjectives,
-    orgMembers,
-    orgInvites,
-    setObjectives,
-    setOrgMembers,
-    setOrgInvites,
-    openObjectiveModal,
-    closeObjectiveModal,
-    openReportModal,
-    closeReportModal,
-    openOrgSettings,
-    closeOrgSettings,
-    openHelp,
-    closeHelp,
-    openHistoryModal,
-    closeHistoryModal,
-    setSelectedIdx,
-    setHoveredObjId,
-    toggleExpanded,
-    setMenuOpenId,
-    selectNext,
-    selectPrev,
-    selectByNumber,
-    setChartPeriod,
-    cycleTheme,
-  } = useAppStore()
+  const { view, editing, idx, hover, open: expanded, menu, objs, members, invites } = useStore()
 
   const [devObjectives, setDevObjectives] = useState<ObjectiveWithProgress[]>([])
   const { data: dbObjectives = [], mutate } = useSWR(devMode ? null : `objectives-${org.id}`, () =>
@@ -1265,22 +1223,19 @@ export function Objectives({ user, org, orgRole, devMode, needsOrgName, userOrgs
   const isAdmin = orgRole === "owner" || orgRole === "admin"
 
   useEffect(() => {
-    if (!devMode && dbObjectives.length > 0) setObjectives(dbObjectives)
-  }, [dbObjectives, devMode, setObjectives])
+    if (!devMode && dbObjectives.length > 0) $.set("objs", dbObjectives)
+  }, [dbObjectives, devMode])
 
-  const objectives = devMode ? devObjectives : storeObjectives.length > 0 ? storeObjectives : dbObjectives
+  const objectives = devMode ? devObjectives : objs.length > 0 ? objs : dbObjectives
 
   useEffect(() => {
-    if (showOrgSettings && org && !devMode) {
+    if (view === "settings" && org && !devMode) {
       Promise.all([
-        import("@/lib/actions").then((m) => m.getOrgMembers(org.id)),
-        import("@/lib/actions").then((m) => m.getOrgInvites(org.id)),
-      ]).then(([members, invites]) => {
-        setOrgMembers(members)
-        setOrgInvites(invites)
-      })
+        import("@/lib/actions").then((m) => m.getMembers(org.id)),
+        import("@/lib/actions").then((m) => m.getInvites(org.id)),
+      ]).then(([m, i]) => { $.set("members", m); $.set("invites", i) })
     }
-  }, [showOrgSettings, org, devMode, setOrgMembers, setOrgInvites])
+  }, [view, org, devMode])
 
   const canAddObjective = objectives.length < MAX_OBJECTIVES
 
@@ -1300,158 +1255,45 @@ export function Objectives({ user, org, orgRole, devMode, needsOrgName, userOrgs
   const onKey = useCallback(
     (e: KeyboardEvent) => {
       const tag = (e.target as HTMLElement)?.tagName
-      const isInput = tag === "INPUT" || tag === "TEXTAREA" || tag === "SELECT"
+      const inInput = tag === "INPUT" || tag === "TEXTAREA" || tag === "SELECT"
 
       if (e.key === "Escape") {
         e.preventDefault()
-        if (showHistoryModal) {
-          closeHistoryModal()
-          return
-        }
-        if (showHelp) {
-          closeHelp()
-          return
-        }
-        if (menuOpenId) {
-          setMenuOpenId(null)
-          return
-        }
-        if (showObjectiveModal) {
-          closeObjectiveModal()
-          return
-        }
-        if (showReportModal) {
-          closeReportModal()
-          return
-        }
-        if (showOrgSettings) {
-          closeOrgSettings()
-          return
-        }
-        setSelectedIdx(-1)
-        return
+        if (view) return $.hide()
+        if (menu) return $.set("menu", null)
+        return $.set("idx", -1)
       }
 
       if (e.metaKey || e.ctrlKey) {
-        if (e.key === "n") {
-          e.preventDefault()
-          if (canAddObjective && !showObjectiveModal && !showReportModal) openObjectiveModal()
-        }
-        if (e.key === ",") {
-          e.preventDefault()
-          if (!showOrgSettings) openOrgSettings()
-        }
-        if (e.key === ".") {
-          e.preventDefault()
-          cycleTheme()
-        }
+        if (e.key === "n" && canAddObjective && !view) $.show("objective")
+        if (e.key === "," && view !== "settings") $.show("settings")
+        if (e.key === ".") $.dark()
         return
       }
 
-      if (isInput || showObjectiveModal || showReportModal || showOrgSettings || showHelp || showHistoryModal) return
+      if (inInput || view) return
 
-      if (e.key === "?" || (e.shiftKey && e.key === "/")) {
-        e.preventDefault()
-        openHelp()
-        return
-      }
-      if (e.key === "m" || e.key === "M") {
-        e.preventDefault()
-        setChartPeriod("1M")
-        return
-      }
-      if (e.key === "q" || e.key === "Q") {
-        e.preventDefault()
-        setChartPeriod("Q")
-        return
-      }
-      if (e.key === "y" || e.key === "Y") {
-        e.preventDefault()
-        setChartPeriod("Y")
-        return
-      }
-      if (e.key >= "1" && e.key <= "5") {
-        e.preventDefault()
-        selectByNumber(parseInt(e.key, 10))
-        return
-      }
-      if (e.key === "j" || e.key === "ArrowDown") {
-        e.preventDefault()
-        selectNext()
-        return
-      }
-      if (e.key === "k" || e.key === "ArrowUp") {
-        e.preventDefault()
-        selectPrev()
-        return
-      }
+      if (e.key === "?" || (e.shiftKey && e.key === "/")) return $.show("help")
+      if (e.key === "m" || e.key === "M") return $.set("range", "1M")
+      if (e.key === "q" || e.key === "Q") return $.set("range", "Q")
+      if (e.key === "y" || e.key === "Y") return $.set("range", "Y")
+      if (e.key >= "1" && e.key <= "5") return $.go(parseInt(e.key, 10))
+      if (e.key === "j" || e.key === "ArrowDown") return $.nav(1)
+      if (e.key === "k" || e.key === "ArrowUp") return $.nav(-1)
+      if (e.key === "o" || e.key === "O") return $.show("settings")
 
-      if (selectedIdx >= 0 && selectedIdx < objectives.length) {
-        const obj = objectives[selectedIdx]
-        if (e.key === "Enter" || e.key === " " || e.key === "x" || e.key === "X") {
-          e.preventDefault()
-          toggleExpanded(obj.id)
-          return
-        }
-        if (e.key === "r" || e.key === "R") {
-          e.preventDefault()
-          openReportModal(obj)
-          return
-        }
-        if (e.key === "h" || e.key === "H") {
-          e.preventDefault()
-          openHistoryModal(obj)
-          return
-        }
-        if ((e.key === "e" || e.key === "E") && isAdmin) {
-          e.preventDefault()
-          openObjectiveModal(obj)
-          return
-        }
+      if (idx >= 0 && idx < objectives.length) {
+        const obj = objectives[idx]
+        if (e.key === "Enter" || e.key === " " || e.key === "x" || e.key === "X") return $.flip(obj.id)
+        if (e.key === "r" || e.key === "R") return $.show("report", obj)
+        if (e.key === "h" || e.key === "H") return $.show("history", obj)
+        if ((e.key === "e" || e.key === "E") && isAdmin) return $.show("objective", obj)
         if ((e.key === "d" || e.key === "D" || e.key === "Delete" || e.key === "Backspace") && isAdmin) {
-          e.preventDefault()
           if (confirm(`Delete "${obj.title}"?`)) deleteObj(obj.id)
-          return
         }
-      }
-
-      if (e.key === "o" || e.key === "O") {
-        e.preventDefault()
-        openOrgSettings()
-        return
       }
     },
-    [
-      canAddObjective,
-      objectives,
-      selectedIdx,
-      showObjectiveModal,
-      showReportModal,
-      showOrgSettings,
-      showHelp,
-      showHistoryModal,
-      menuOpenId,
-      isAdmin,
-      deleteObj,
-      closeHelp,
-      closeHistoryModal,
-      setMenuOpenId,
-      closeObjectiveModal,
-      closeReportModal,
-      closeOrgSettings,
-      setSelectedIdx,
-      openObjectiveModal,
-      openOrgSettings,
-      cycleTheme,
-      openHelp,
-      openHistoryModal,
-      setChartPeriod,
-      selectByNumber,
-      selectNext,
-      selectPrev,
-      toggleExpanded,
-      openReportModal,
-    ]
+    [canAddObjective, objectives, idx, view, menu, isAdmin, deleteObj]
   )
 
   useEffect(() => {
@@ -1471,23 +1313,16 @@ export function Objectives({ user, org, orgRole, devMode, needsOrgName, userOrgs
             <OrgSwitcher
               currentOrg={org}
               orgs={userOrgs}
-              onCreateOrg={() => {
-                window.location.href = "/?new=1"
-              }}
-              onEditOrg={() => {
-                openOrgSettings()
-              }}
+              onCreateOrg={() => window.location.href = "/?new=1"}
+              onEditOrg={() => $.show("settings")}
             />
-            <span>{user.email}</span>
-            <button
-              onClick={() => {
+            <UserMenu
+              email={user.email || ""}
+              onSignOut={() => {
                 supabase.auth.signOut()
                 window.location.href = "/"
               }}
-              className="hover:text-foreground"
-            >
-              sign out
-            </button>
+            />
           </div>
         </div>
       </header>
@@ -1495,27 +1330,23 @@ export function Objectives({ user, org, orgRole, devMode, needsOrgName, userOrgs
       <ThemeButton
         mobileOrg={org}
         mobileUserOrgs={userOrgs}
-        mobileOpenOrgSettings={openOrgSettings}
-        mobileSignOut={() => {
-          supabase.auth.signOut()
-          window.location.href = "/"
-        }}
+        mobileOpenOrgSettings={() => $.show("settings")}
+        mobileSignOut={() => { supabase.auth.signOut(); window.location.href = "/" }}
         mobileUserEmail={user.email}
       />
 
       <main className="flex-1 flex flex-col overflow-hidden pb-[104px] md:pb-0">
         <div className="mx-auto w-full max-w-3xl lg:max-w-5xl xl:max-w-6xl px-6 pt-8 flex-shrink-0">
-          <ProgressChart objectives={objectives} hoveredObj={hoveredObjId} setHoveredObj={setHoveredObjId} />
+          <ProgressChart objectives={objectives} hoveredObj={hover} setHoveredObj={(id) => $.set("hover", id)} />
           <div className="hidden md:flex items-center justify-between mb-4 select-none">
             <h2 className="text-sm font-medium">Objectives</h2>
             <button
-              onClick={() => canAddObjective && openObjectiveModal()}
+              onClick={() => canAddObjective && $.show("objective")}
               disabled={!canAddObjective}
               className={`flex items-center gap-1.5 text-xs ${canAddObjective ? "text-muted-foreground hover:text-foreground" : "text-muted-foreground/50 cursor-not-allowed"}`}
               title={!canAddObjective ? `Maximum ${MAX_OBJECTIVES} objectives reached` : undefined}
             >
-              <Plus className="h-3.5 w-3.5" /> New{" "}
-              <kbd className="ml-1 px-1.5 py-0.5 bg-muted font-mono text-[10px]">⌘N</kbd>
+              <Plus className="h-3.5 w-3.5" /> New <kbd className="ml-1 px-1.5 py-0.5 bg-muted font-mono text-[10px]">⌘N</kbd>
             </button>
           </div>
         </div>
@@ -1528,23 +1359,23 @@ export function Objectives({ user, org, orgRole, devMode, needsOrgName, userOrgs
           ) : (
             <div>
               {objectives.map((obj, i) => {
-                const isOtherHovered = hoveredObjId !== null && hoveredObjId !== obj.id
-                const isSelected = selectedIdx === i
+                const faded = hover !== null && hover !== obj.id
+                const active = idx === i
                 return (
                   <div
                     key={obj.id}
-                    onMouseEnter={() => setHoveredObjId(obj.id)}
-                    onMouseLeave={() => setHoveredObjId(null)}
-                    className={`transition-opacity ${isOtherHovered ? "opacity-30" : ""} ${isSelected ? "ring-1 ring-foreground/20" : ""}`}
+                    onMouseEnter={() => $.set("hover", obj.id)}
+                    onMouseLeave={() => $.set("hover", null)}
+                    className={`transition-opacity ${faded ? "opacity-30" : ""} ${active ? "ring-1 ring-foreground/20" : ""}`}
                   >
                     <div className="group flex items-center gap-3 px-4 py-2">
                       <button
-                        onClick={() => toggleExpanded(obj.id)}
+                        onClick={() => $.flip(obj.id)}
                         className="text-muted-foreground hover:text-foreground"
                         title="Expand/Collapse (X)"
                       >
                         <ChevronRight
-                          className={`h-4 w-4 transition-transform ${expandedIds.has(obj.id) ? "rotate-90" : ""}`}
+                          className={`h-4 w-4 transition-transform ${expanded.has(obj.id) ? "rotate-90" : ""}`}
                         />
                       </button>
                       {(() => {
@@ -1595,13 +1426,13 @@ export function Objectives({ user, org, orgRole, devMode, needsOrgName, userOrgs
                         {obj.overall_progress.toFixed(0)}%
                       </span>
                       <button
-                        onClick={() => openReportModal(obj)}
+                        onClick={() => $.show("report", obj)}
                         className="text-xs text-muted-foreground hover:text-foreground transition-colors leading-none flex items-center gap-1"
                       >
                         report <kbd className="px-1 py-0.5 bg-muted font-mono text-[10px]">R</kbd>
                       </button>
                       <button
-                        onClick={() => openHistoryModal(obj)}
+                        onClick={() => $.show("history", obj)}
                         className="text-xs text-muted-foreground hover:text-foreground transition-colors leading-none flex items-center gap-1"
                       >
                         history <kbd className="px-1 py-0.5 bg-muted font-mono text-[10px]">H</kbd>
@@ -1609,30 +1440,24 @@ export function Objectives({ user, org, orgRole, devMode, needsOrgName, userOrgs
                       {isAdmin && (
                         <div className="relative opacity-0 group-hover:opacity-100 transition-opacity flex items-center">
                           <button
-                            onClick={() => setMenuOpenId(menuOpenId === obj.id ? null : obj.id)}
+                            onClick={() => $.set("menu", menu === obj.id ? null : obj.id)}
                             className="text-muted-foreground hover:text-foreground"
                           >
                             <MoreVertical className="h-4 w-4" />
                           </button>
-                          {menuOpenId === obj.id && (
+                          {menu === obj.id && (
                             <>
-                              <div className="fixed inset-0 z-40" onClick={() => setMenuOpenId(null)} />
+                              <div className="fixed inset-0 z-40" onClick={() => $.set("menu", null)} />
                               <div className="absolute right-0 top-full mt-1 z-50 min-w-[120px] bg-popover border border-border rounded-md shadow-md py-1">
                                 <button
-                                  onClick={() => {
-                                    openObjectiveModal(obj)
-                                    setMenuOpenId(null)
-                                  }}
+                                  onClick={() => { $.show("objective", obj); $.set("menu", null) }}
                                   className="w-full px-3 py-1.5 text-left text-sm hover:bg-muted/50 flex items-center justify-between"
                                 >
                                   <span>Edit</span>
                                   <kbd className="text-[10px] text-muted-foreground font-mono">E</kbd>
                                 </button>
                                 <button
-                                  onClick={() => {
-                                    deleteObj(obj.id)
-                                    setMenuOpenId(null)
-                                  }}
+                                  onClick={() => { deleteObj(obj.id); $.set("menu", null) }}
                                   className="w-full px-3 py-1.5 text-left text-sm text-red-400 hover:bg-muted/50 flex items-center justify-between"
                                 >
                                   <span>Delete</span>
@@ -1644,7 +1469,7 @@ export function Objectives({ user, org, orgRole, devMode, needsOrgName, userOrgs
                         </div>
                       )}
                     </div>
-                    {expandedIds.has(obj.id) && (
+                    {expanded.has(obj.id) && (
                       <div className="px-4 pb-1 pl-11">
                         {obj.description && (
                           <p className="text-xs text-muted-foreground mb-1 truncate" title={obj.description}>
@@ -1688,7 +1513,7 @@ export function Objectives({ user, org, orgRole, devMode, needsOrgName, userOrgs
       <div className="md:hidden fixed bottom-16 left-0 right-0 bg-background z-30 flex items-center justify-between px-4 h-10 select-none">
         <h2 className="text-sm font-medium">Objectives</h2>
         <button
-          onClick={() => canAddObjective && openObjectiveModal()}
+          onClick={() => canAddObjective && $.show("objective")}
           disabled={!canAddObjective}
           className={`flex items-center gap-1.5 text-xs ${canAddObjective ? "text-muted-foreground hover:text-foreground" : "text-muted-foreground/50 cursor-not-allowed"}`}
         >
@@ -1696,109 +1521,76 @@ export function Objectives({ user, org, orgRole, devMode, needsOrgName, userOrgs
         </button>
       </div>
 
-      {showObjectiveModal && (
+      {view === "objective" && (
         <ObjectiveModal
-          onClose={closeObjectiveModal}
-          onDone={() => {
-            closeObjectiveModal()
-            if (!devMode) mutate()
-          }}
+          onClose={$.hide}
+          onDone={() => { $.hide(); if (!devMode) mutate() }}
           devMode={devMode}
-          editingObjective={editingObjective}
-          onDevCreate={(obj) => setDevObjectives((prev) => [obj, ...prev])}
-          onDevUpdate={(updatedObj) =>
-            setDevObjectives((prev) => prev.map((o) => (o.id === updatedObj.id ? updatedObj : o)))
-          }
+          editingObjective={editing}
+          onDevCreate={(obj) => setDevObjectives((p) => [obj, ...p])}
+          onDevUpdate={(obj) => setDevObjectives((p) => p.map((o) => o.id === obj.id ? obj : o))}
           orgId={org.id}
         />
       )}
-      {showReportModal && reportingObjective && (
+      {view === "report" && editing && (
         <ReportModal
-          objective={reportingObjective}
-          onClose={closeReportModal}
-          onDone={() => {
-            closeReportModal()
-            if (!devMode) mutate()
-          }}
+          objective={editing}
+          onClose={$.hide}
+          onDone={() => { $.hide(); if (!devMode) mutate() }}
           devMode={devMode}
-          onDevUpdate={(updatedObj) =>
-            setDevObjectives((prev) => prev.map((o) => (o.id === updatedObj.id ? updatedObj : o)))
-          }
+          onDevUpdate={(obj) => setDevObjectives((p) => p.map((o) => o.id === obj.id ? obj : o))}
           orgId={org.id}
         />
       )}
-      {showOrgSettings && (
+      {view === "settings" && (
         <OrgSettings
           org={org}
-          members={orgMembers}
-          invites={orgInvites}
+          members={members}
+          invites={invites}
           currentUserRole={orgRole}
-          onClose={closeOrgSettings}
+          onClose={$.hide}
           onInvite={async (email, role) => {
-            const { inviteToOrg } = await import("@/lib/actions")
-            const result = await inviteToOrg(org.id, email, role)
-            if (!result.error) {
-              const { getOrgInvites } = await import("@/lib/actions")
-              setOrgInvites(await getOrgInvites(org.id))
-            }
-            return result
+            const { sendInvite, getInvites } = await import("@/lib/actions")
+            const r = await sendInvite(org.id, email, role)
+            if (!r.error) $.set("invites", await getInvites(org.id))
+            return r
           }}
           onRemoveMember={async (memberId) => {
-            const { removeOrgMember } = await import("@/lib/actions")
-            const result = await removeOrgMember(org.id, memberId)
-            if (!result.error) {
-              const { getOrgMembers } = await import("@/lib/actions")
-              setOrgMembers(await getOrgMembers(org.id))
-            }
-            return result
+            const { removeMember, getMembers } = await import("@/lib/actions")
+            const r = await removeMember(org.id, memberId)
+            if (!r.error) $.set("members", await getMembers(org.id))
+            return r
           }}
           onUpdateMemberRole={async (memberId, role) => {
-            const { updateMemberRole } = await import("@/lib/actions")
-            const result = await updateMemberRole(org.id, memberId, role)
-            if (!result.error) {
-              const { getOrgMembers } = await import("@/lib/actions")
-              setOrgMembers(await getOrgMembers(org.id))
-            }
-            return result
+            const { setMemberRole, getMembers } = await import("@/lib/actions")
+            const r = await setMemberRole(org.id, memberId, role)
+            if (!r.error) $.set("members", await getMembers(org.id))
+            return r
           }}
           onUpdateMemberName={async (memberId, name) => {
-            const { updateMemberName } = await import("@/lib/actions")
-            const result = await updateMemberName(org.id, memberId, name)
-            if (!result.error) {
-              const { getOrgMembers } = await import("@/lib/actions")
-              setOrgMembers(await getOrgMembers(org.id))
-            }
-            return result
+            const { renameMember, getMembers } = await import("@/lib/actions")
+            const r = await renameMember(org.id, memberId, name)
+            if (!r.error) $.set("members", await getMembers(org.id))
+            return r
           }}
           onTransferOwnership={async (memberId) => {
-            const { transferOwnership } = await import("@/lib/actions")
-            const result = await transferOwnership(org.id, memberId)
-            if (!result.error) {
-              const { getOrgMembers } = await import("@/lib/actions")
-              setOrgMembers(await getOrgMembers(org.id))
-            }
-            return result
+            const { transferOwnership, getMembers } = await import("@/lib/actions")
+            const r = await transferOwnership(org.id, memberId)
+            if (!r.error) $.set("members", await getMembers(org.id))
+            return r
           }}
           onCancelInvite={async (inviteId) => {
-            const { cancelInvite } = await import("@/lib/actions")
-            const result = await cancelInvite(org.id, inviteId)
-            if (!result.error) {
-              const { getOrgInvites } = await import("@/lib/actions")
-              setOrgInvites(await getOrgInvites(org.id))
-            }
-            return result
+            const { cancelInvite, getInvites } = await import("@/lib/actions")
+            const r = await cancelInvite(org.id, inviteId)
+            if (!r.error) $.set("invites", await getInvites(org.id))
+            return r
           }}
-          onUpdateSettings={async (settings) => {
-            const { updateOrgSettings } = await import("@/lib/actions")
-            return updateOrgSettings(org.id, settings)
-          }}
+          onUpdateSettings={async (s) => (await import("@/lib/actions")).updateOrg(org.id, s)}
           highlightOrgName={needsOrgName}
         />
       )}
-      {showHelp && <HelpModal onClose={closeHelp} />}
-      {showHistoryModal && historyObjective && (
-        <HistoryModal objective={historyObjective} onClose={closeHistoryModal} />
-      )}
+      {view === "help" && <HelpModal onClose={$.hide} />}
+      {view === "history" && editing && <HistoryModal objective={editing} onClose={$.hide} />}
     </div>
   )
 }
