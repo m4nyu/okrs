@@ -22,7 +22,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
             __html: `
               (function() {
                 try {
-                  var theme = JSON.parse(localStorage.getItem('okr-store') || '{}').state?.theme;
+                  var theme = JSON.parse(localStorage.getItem('okr') || '{}').state?.theme;
                   if (theme === 'dark' || (theme === 'system' && window.matchMedia('(prefers-color-scheme: dark)').matches) || (!theme && window.matchMedia('(prefers-color-scheme: dark)').matches)) {
                     document.documentElement.classList.add('dark');
                   }
