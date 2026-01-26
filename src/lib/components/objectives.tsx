@@ -615,7 +615,6 @@ function ObjectiveModal({
           description,
           status: "active",
           end_date: endDate,
-          is_public: false,
           created_at: new Date().toISOString(),
           updated_at: new Date().toISOString(),
           key_results: keyResults
