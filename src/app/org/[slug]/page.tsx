@@ -1,7 +1,7 @@
 import { redirect } from "next/navigation"
 import { AuthForm } from "@/lib/components/auth"
 import { Objectives } from "@/lib/components/objectives"
-import { createClient } from "@/lib/supabase/server"
+import { createClient } from "@/lib/db/server"
 
 const DEV_MODE = process.env.NEXT_PUBLIC_DEV_MODE === "true"
 
