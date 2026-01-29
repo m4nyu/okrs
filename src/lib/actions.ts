@@ -16,6 +16,14 @@ async function checkMembership(supabase: Awaited<ReturnType<typeof createClient>
   return data
 }
 
+function generateSlug(name: string): string {
+  return name
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/(^-|-$)/g, "")
+}
+
 function revalidate() {
   revalidatePath("/", "layout")
 }
@@ -203,7 +211,25 @@ export async function updateOrg(
   if (!m || (m.role !== "owner" && m.role !== "admin")) return { error: "Not authorized" }
 
   const updates: Record<string, unknown> = { updated_at: new Date().toISOString() }
-  if (settings.name) updates.name = settings.name
+  let newSlug: string | undefined
+
+  if (settings.name) {
+    updates.name = settings.name
+    newSlug = generateSlug(settings.name)
+    if (newSlug.length < 2) return { error: "Organization name is too short" }
+
+    // Check if slug is already taken by another org
+    const { data: existing } = await admin
+      .from("organizations")
+      .select("id")
+      .eq("slug", newSlug)
+      .neq("id", orgId)
+      .single()
+    if (existing) return { error: "An organization with this name already exists" }
+
+    updates.slug = newSlug
+  }
+
   if (settings.auto_join_domain !== undefined) updates.auto_join_domain = settings.auto_join_domain
   if (settings.domain !== undefined) updates.domain = settings.domain
 
@@ -211,7 +237,7 @@ export async function updateOrg(
   if (error) return { error: error.message }
 
   revalidate()
-  return { success: true }
+  return { success: true, slug: newSlug }
 }
 
 // --- Members ---
@@ -535,14 +561,14 @@ export async function acceptInvite(token: string) {
     .single()
 
   if (existing) {
-    await supabase.from("org_invites").delete().eq("id", inv.id)
+    await supabase.from("org_invites").delete().eq("id", inv.id).eq("org_id", inv.org_id)
     return { success: true }
   }
 
   const { error } = await supabase.from("org_members").insert({ org_id: inv.org_id, user_id: user.id, role: inv.role })
   if (error) return { error: error.message }
 
-  await supabase.from("org_invites").delete().eq("id", inv.id)
+  await supabase.from("org_invites").delete().eq("id", inv.id).eq("org_id", inv.org_id)
 
   revalidate()
   return { success: true }
@@ -668,31 +694,8 @@ export async function deleteOrg(orgId: string) {
   const m = await checkMembership(supabase, user.id, orgId)
   if (!m || m.role !== "owner") return { error: "Only the owner can delete the organization" }
 
-  // Delete all org data in order (respecting foreign keys)
-  // 1. Delete progress updates (via key_results -> objectives)
-  const { data: objectives } = await supabase.from("objectives").select("id").eq("org_id", orgId)
-  if (objectives?.length) {
-    const objIds = objectives.map((o) => o.id)
-    const { data: keyResults } = await supabase.from("key_results").select("id").in("objective_id", objIds)
-    if (keyResults?.length) {
-      await supabase
-        .from("progress_updates")
-        .delete()
-        .in(
-          "key_result_id",
-          keyResults.map((k) => k.id)
-        )
-    }
-    // 2. Delete key results
-    await supabase.from("key_results").delete().in("objective_id", objIds)
-  }
-  // 3. Delete objectives
-  await supabase.from("objectives").delete().eq("org_id", orgId)
-  // 4. Delete invites
-  await supabase.from("org_invites").delete().eq("org_id", orgId)
-  // 5. Delete memberships
-  await supabase.from("org_members").delete().eq("org_id", orgId)
-  // 6. Delete org
+  // Delete the organization - all related data (members, invites, objectives,
+  // key_results, progress_updates) will cascade automatically via foreign keys
   const { error } = await supabase.from("organizations").delete().eq("id", orgId)
   if (error) return { error: error.message }
 
