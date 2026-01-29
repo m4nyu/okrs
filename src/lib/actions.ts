@@ -258,7 +258,7 @@ export async function removeMember(orgId: string, memberId: string) {
   if (target.role === "owner") return { error: "Cannot remove owner" }
   if (m.role === "admin" && target.role === "admin") return { error: "Admins cannot remove other admins" }
 
-  const { error } = await supabase.from("org_members").delete().eq("id", memberId)
+  const { error } = await supabase.from("org_members").delete().eq("id", memberId).eq("org_id", orgId)
   if (error) return { error: error.message }
 
   revalidate()
@@ -377,6 +377,38 @@ export async function getInvites(orgId: string) {
   return data || []
 }
 
+export async function generateInviteLink(orgId: string, inviteRole: "owner" | "admin" | "member" = "member") {
+  const { supabase, user } = await auth()
+  if (!user) return { error: "Not authenticated" }
+
+  const m = await checkMembership(supabase, user.id, orgId)
+  if (!m || (m.role !== "owner" && m.role !== "admin")) return { error: "Not authorized" }
+  if (inviteRole === "owner" && m.role !== "owner") return { error: "Only owners can create owner invites" }
+
+  const expiresAt = new Date()
+  expiresAt.setDate(expiresAt.getDate() + 7)
+
+  // Use a placeholder email for link-based invites
+  const placeholderEmail = `invite-${Date.now()}@link.okrs.dev`
+
+  const { data, error } = await supabase
+    .from("org_invites")
+    .insert({
+      org_id: orgId,
+      email: placeholderEmail,
+      role: inviteRole,
+      invited_by: user.id,
+      expires_at: expiresAt.toISOString(),
+    })
+    .select("token")
+    .single()
+
+  if (error) return { error: error.message }
+
+  revalidate()
+  return { token: data.token }
+}
+
 export async function sendInvite(orgId: string, email: string, inviteRole: "owner" | "admin" | "member" = "member") {
   const { supabase, user } = await auth()
   if (!user) return { error: "Not authenticated" }
@@ -427,16 +459,45 @@ export async function sendInvite(orgId: string, email: string, inviteRole: "owne
     await resend.emails.send({
       from: process.env.RESEND_FROM_EMAIL || "OKR <noreply@okrs.dev>",
       to: email.toLowerCase(),
-      subject: `You're invited to join ${orgName}`,
+      subject: `Join ${orgName} on OKRs`,
       html: `
-        <div style="font-family: sans-serif; max-width: 600px; margin: 0 auto;">
-          <h2>You're invited!</h2>
-          <p>${user.email} has invited you to join <strong>${orgName}</strong> on OKR.</p>
-          <p>Click the button below to accept your invitation:</p>
-          <a href="${inviteUrl}" style="display: inline-block; background: #000; color: #fff; padding: 12px 24px; text-decoration: none; margin: 16px 0;">Accept Invitation</a>
-          <p style="color: #666; font-size: 14px;">This invite expires in 7 days.</p>
-          <p style="color: #666; font-size: 12px;">If the button doesn't work, copy and paste this link: ${inviteUrl}</p>
-        </div>
+        <!DOCTYPE html>
+        <html>
+        <head>
+          <meta charset="utf-8">
+          <meta name="viewport" content="width=device-width, initial-scale=1.0">
+        </head>
+        <body style="margin: 0; padding: 0; background-color: #f4f4f5; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;">
+          <table width="100%" cellpadding="0" cellspacing="0" style="background-color: #f4f4f5; padding: 40px 20px;">
+            <tr>
+              <td align="center">
+                <table width="100%" cellpadding="0" cellspacing="0" style="max-width: 480px; background-color: #ffffff; overflow: hidden; box-shadow: 0 1px 3px rgba(0,0,0,0.1);">
+                  <tr>
+                    <td style="padding: 48px 40px; text-align: center;">
+                      <img src="${process.env.NEXT_PUBLIC_APP_URL || "https://okrs.dev"}/icon.png" alt="OKRs" width="48" height="48" style="width: 48px; height: 48px; margin: 0 auto 24px; display: block;" />
+                      <h1 style="margin: 0 0 8px; font-size: 24px; font-weight: 600; color: #18181b;">Join ${orgName}</h1>
+                      <p style="margin: 0 0 32px; font-size: 15px; color: #71717a; line-height: 1.5;">
+                        ${user.email} invited you to collaborate on OKRs
+                      </p>
+                      <a href="${inviteUrl}" style="display: inline-block; background-color: #18181b; color: #ffffff; padding: 14px 32px; text-decoration: none; font-size: 14px; font-weight: 500;">Accept Invitation</a>
+                      <p style="margin: 32px 0 0; font-size: 12px; color: #a1a1aa;">
+                        Expires in 7 days
+                      </p>
+                    </td>
+                  </tr>
+                  <tr>
+                    <td style="padding: 24px 40px; background-color: #fafafa; border-top: 1px solid #f4f4f5;">
+                      <p style="margin: 0; font-size: 11px; color: #a1a1aa; text-align: center; word-break: break-all;">
+                        ${inviteUrl}
+                      </p>
+                    </td>
+                  </tr>
+                </table>
+              </td>
+            </tr>
+          </table>
+        </body>
+        </html>
       `,
     })
   } catch (e) {
@@ -451,15 +512,20 @@ export async function acceptInvite(token: string) {
   const { supabase, user } = await auth()
   if (!user?.email) return { error: "Not authenticated" }
 
+  // Find invite by token only - the token itself is the secret
   const { data: inv } = await supabase
     .from("org_invites")
     .select("*")
     .eq("token", token)
-    .eq("email", user.email.toLowerCase())
     .gt("expires_at", new Date().toISOString())
     .single()
 
   if (!inv) return { error: "Invalid or expired invite" }
+
+  // Warn if email doesn't match but still allow (token is the auth)
+  if (inv.email.toLowerCase() !== user.email.toLowerCase()) {
+    console.log(`[acceptInvite] Email mismatch: invited ${inv.email}, accepting ${user.email}`)
+  }
 
   const { data: existing } = await supabase
     .from("org_members")
@@ -490,6 +556,104 @@ export async function cancelInvite(orgId: string, inviteId: string) {
   if (!m || (m.role !== "owner" && m.role !== "admin")) return { error: "Not authorized" }
 
   const { error } = await supabase.from("org_invites").delete().eq("id", inviteId).eq("org_id", orgId)
+  if (error) return { error: error.message }
+
+  revalidate()
+  return { success: true }
+}
+
+export async function resendInvite(orgId: string, inviteId: string) {
+  const { supabase, user } = await auth()
+  if (!user) return { error: "Not authenticated" }
+
+  const m = await checkMembership(supabase, user.id, orgId)
+  if (!m || (m.role !== "owner" && m.role !== "admin")) return { error: "Not authorized" }
+
+  const { data: invite } = await supabase
+    .from("org_invites")
+    .select("*, organizations(name)")
+    .eq("id", inviteId)
+    .eq("org_id", orgId)
+    .single()
+
+  if (!invite) return { error: "Invite not found" }
+
+  // Extend expiry
+  const newExpiry = new Date()
+  newExpiry.setDate(newExpiry.getDate() + 7)
+  await supabase.from("org_invites").update({ expires_at: newExpiry.toISOString() }).eq("id", inviteId)
+
+  const orgName = (invite.organizations as { name: string })?.name || "the organization"
+  const inviteUrl = `${process.env.NEXT_PUBLIC_APP_URL || "https://okrs.dev"}/invite/${invite.token}`
+
+  try {
+    const { Resend } = await import("resend")
+    const resend = new Resend(process.env.RESEND_API_KEY)
+    await resend.emails.send({
+      from: process.env.RESEND_FROM_EMAIL || "OKR <noreply@okrs.dev>",
+      to: invite.email,
+      subject: `Reminder: Join ${orgName} on OKRs`,
+      html: `
+        <!DOCTYPE html>
+        <html>
+        <head>
+          <meta charset="utf-8">
+          <meta name="viewport" content="width=device-width, initial-scale=1.0">
+        </head>
+        <body style="margin: 0; padding: 0; background-color: #f4f4f5; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;">
+          <table width="100%" cellpadding="0" cellspacing="0" style="background-color: #f4f4f5; padding: 40px 20px;">
+            <tr>
+              <td align="center">
+                <table width="100%" cellpadding="0" cellspacing="0" style="max-width: 480px; background-color: #ffffff; overflow: hidden; box-shadow: 0 1px 3px rgba(0,0,0,0.1);">
+                  <tr>
+                    <td style="padding: 48px 40px; text-align: center;">
+                      <img src="${process.env.NEXT_PUBLIC_APP_URL || "https://okrs.dev"}/icon.png" alt="OKRs" width="48" height="48" style="width: 48px; height: 48px; margin: 0 auto 24px; display: block;" />
+                      <h1 style="margin: 0 0 8px; font-size: 24px; font-weight: 600; color: #18181b;">Join ${orgName}</h1>
+                      <p style="margin: 0 0 32px; font-size: 15px; color: #71717a; line-height: 1.5;">
+                        ${user.email} is still waiting for you to join
+                      </p>
+                      <a href="${inviteUrl}" style="display: inline-block; background-color: #18181b; color: #ffffff; padding: 14px 32px; text-decoration: none; font-size: 14px; font-weight: 500;">Accept Invitation</a>
+                      <p style="margin: 32px 0 0; font-size: 12px; color: #a1a1aa;">
+                        Expires in 7 days
+                      </p>
+                    </td>
+                  </tr>
+                  <tr>
+                    <td style="padding: 24px 40px; background-color: #fafafa; border-top: 1px solid #f4f4f5;">
+                      <p style="margin: 0; font-size: 11px; color: #a1a1aa; text-align: center; word-break: break-all;">
+                        ${inviteUrl}
+                      </p>
+                    </td>
+                  </tr>
+                </table>
+              </td>
+            </tr>
+          </table>
+        </body>
+        </html>
+      `,
+    })
+  } catch (e) {
+    console.error("Failed to resend invite email:", e)
+    return { error: "Failed to send email" }
+  }
+
+  revalidate()
+  return { success: true }
+}
+
+export async function updateInviteRole(orgId: string, inviteId: string, newRole: "owner" | "admin" | "member") {
+  const { supabase, user } = await auth()
+  if (!user) return { error: "Not authenticated" }
+
+  const m = await checkMembership(supabase, user.id, orgId)
+  if (!m || (m.role !== "owner" && m.role !== "admin")) return { error: "Not authorized" }
+
+  const { error } = await supabase
+    .from("org_invites")
+    .update({ role: newRole })
+    .eq("id", inviteId)
+    .eq("org_id", orgId)
   if (error) return { error: error.message }
 
   revalidate()

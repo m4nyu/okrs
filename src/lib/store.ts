@@ -22,7 +22,6 @@ interface S {
   menu: string | null
   tab: "members" | "invites"
   range: "1M" | "Q" | "Y"
-  theme: "light" | "dark" | "system"
 }
 
 const use = create<S & A>()(
@@ -39,7 +38,6 @@ const use = create<S & A>()(
       menu: null,
       tab: "members",
       range: "Q",
-      theme: "system",
 
       set: (k, v) => set({ [k]: v } as any),
       show: (v, o) => set({ view: v, editing: o ?? null }),
@@ -63,19 +61,10 @@ const use = create<S & A>()(
             s.hover = s.objs[s.idx].id
           }
         }),
-      dark: () => {
-        const t = get().theme,
-          n = t === "light" ? "dark" : t === "dark" ? "system" : "light"
-        set({ theme: n })
-        document.documentElement.classList.toggle(
-          "dark",
-          n === "dark" || (n === "system" && matchMedia("(prefers-color-scheme: dark)").matches)
-        )
-      },
     })),
     {
       name: "okr",
-      partialize: (s) => ({ theme: s.theme, range: s.range, tab: s.tab, open: [...s.open] }),
+      partialize: (s) => ({ range: s.range, tab: s.tab, open: [...s.open] }),
       onRehydrateStorage: () => (s) => {
         if (s?.open && Array.isArray(s.open)) s.open = new Set(s.open)
       },
@@ -90,7 +79,6 @@ interface A {
   flip(id: string): void
   nav(d: 1 | -1): void
   go(n: number): void
-  dark(): void
 }
 
 export const useStore = use
