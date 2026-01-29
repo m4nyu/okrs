@@ -83,6 +83,7 @@ export interface OrgInvite {
   org_id: string
   email: string
   role: "owner" | "admin" | "member"
+  token: string
   invited_by: string
   expires_at: string
   created_at: string
