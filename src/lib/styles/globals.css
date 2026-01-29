@@ -4,18 +4,12 @@
 @custom-variant dark (&:is(.dark *));
 
 html {
-  background: oklch(1.0000 0 0);
-  color-scheme: light dark;
-}
-
-@media (prefers-color-scheme: dark) {
-  html {
-    background: oklch(0 0 0);
-  }
+  background: var(--background);
+  color-scheme: light;
 }
 
 html.dark {
-  background: oklch(0 0 0);
+  color-scheme: dark;
 }
 
 :root {
@@ -54,6 +48,7 @@ html.dark {
   --radius: 0;
 }
 
+/* Dark theme via class */
 .dark {
   --background: oklch(0 0 0);
   --foreground: oklch(0.9300 0 0);
@@ -89,6 +84,7 @@ html.dark {
   --sidebar-ring: oklch(1.0000 0 0);
   --radius: 0;
 }
+
 
 @theme inline {
   --font-sans: var(--font-geist-sans), sans-serif;
