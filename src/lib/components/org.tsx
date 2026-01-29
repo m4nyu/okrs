@@ -1,6 +1,6 @@
 "use client"
 
-import { Check, ChevronDown, Loader2, Plus, X } from "lucide-react"
+import { Check, ChevronDown, Loader2, MoreVertical, Plus, X } from "lucide-react"
 import { useRouter } from "next/navigation"
 import type React from "react"
 import { useEffect, useRef, useState } from "react"
@@ -54,14 +54,14 @@ function getOrgInitials(name: string): string {
   return (words[0][0] + words[1][0]).toUpperCase()
 }
 
-function RoleDropdown({ value, onChange, options }: { value: string; onChange: (v: any) => void; options: string[] }) {
+function RoleDropdown({ value, onChange, options, openUp, borderless }: { value: string; onChange: (v: any) => void; options: string[]; openUp?: boolean; borderless?: boolean }) {
   const [open, setOpen] = useState(false)
   return (
     <div className="relative">
       <button
         type="button"
         onClick={() => setOpen(!open)}
-        className="h-8 px-2 flex items-center gap-1 text-xs border border-border rounded-md bg-background hover:bg-muted/50"
+        className={borderless ? "flex items-center gap-0.5 text-xs text-muted-foreground hover:text-foreground" : "h-8 px-2 flex items-center gap-1 text-xs border border-border rounded-md bg-background hover:bg-muted/50"}
       >
         {value}
         <ChevronDown className={`h-3 w-3 transition-transform ${open ? "rotate-180" : ""}`} />
@@ -69,7 +69,7 @@ function RoleDropdown({ value, onChange, options }: { value: string; onChange: (
       {open && (
         <>
           <div className="fixed inset-0 z-50" onClick={() => setOpen(false)} />
-          <div className="absolute top-full right-0 mt-1 z-50 bg-background border border-border rounded-md shadow-lg py-1 min-w-[80px]">
+          <div className={`absolute ${openUp ? "bottom-full mb-1" : "top-full mt-1"} ${borderless ? "left-0" : "right-0"} z-50 bg-background border border-border rounded-md shadow-lg py-1 min-w-[80px]`}>
             {options.map((opt) => (
               <button
                 key={opt}
@@ -83,6 +83,63 @@ function RoleDropdown({ value, onChange, options }: { value: string; onChange: (
                 {opt}
               </button>
             ))}
+          </div>
+        </>
+      )}
+    </div>
+  )
+}
+
+function InviteEditMenu({
+  token,
+  isOpen,
+  onToggle,
+  onClose,
+  onCopy,
+  onCancel,
+}: {
+  token: string
+  isOpen: boolean
+  onToggle: () => void
+  onClose: () => void
+  onCopy: () => void
+  onCancel: () => void
+}) {
+  return (
+    <div className="relative flex items-center gap-2">
+      <button
+        type="button"
+        onClick={onToggle}
+        className="text-xs text-muted-foreground hover:text-foreground opacity-0 group-hover:opacity-100"
+      >
+        edit
+      </button>
+      {isOpen && (
+        <>
+          <div className="fixed inset-0 z-50" onClick={onClose} />
+          <div className="absolute top-full right-0 mt-1 z-50 bg-background border border-border shadow-lg py-1 min-w-[100px]">
+            <button
+              type="button"
+              onClick={async () => {
+                onClose()
+                const inviteUrl = `${window.location.origin}/invite/${token}`
+                await navigator.clipboard.writeText(inviteUrl)
+                onCopy()
+              }}
+              className="w-full px-3 py-1.5 text-xs text-left text-muted-foreground hover:text-foreground hover:bg-muted/50"
+            >
+              copy
+            </button>
+            <button
+              type="button"
+              onClick={async () => {
+                onClose()
+                await onCancel()
+              }}
+              className="w-full px-3 py-1.5 text-xs text-left text-muted-foreground hover:text-red-400 hover:bg-muted/50"
+            >
+              cancel
+            </button>
           </div>
         </>
       )}
@@ -218,11 +275,14 @@ interface OrgSettingsProps {
   currentUserRole: "owner" | "admin" | "member"
   onClose: () => void
   onInvite: (email: string, role: "owner" | "admin" | "member") => Promise<{ error?: string }>
+  onGenerateInviteLink: (role: "owner" | "admin" | "member") => Promise<{ error?: string; token?: string }>
   onRemoveMember: (memberId: string) => Promise<{ error?: string }>
   onUpdateMemberRole: (memberId: string, role: "owner" | "admin" | "member") => Promise<{ error?: string }>
   onUpdateMemberName: (memberId: string, name: string) => Promise<{ error?: string }>
   onTransferOwnership: (memberId: string) => Promise<{ error?: string }>
   onCancelInvite: (inviteId: string) => Promise<{ error?: string }>
+  onResendInvite: (inviteId: string) => Promise<{ error?: string }>
+  onUpdateInviteRole: (inviteId: string, role: "owner" | "admin" | "member") => Promise<{ error?: string }>
   onUpdateSettings: (settings: {
     name?: string
     auto_join_domain?: boolean
@@ -239,10 +299,13 @@ export function OrgSettings({
   currentUserRole,
   onClose,
   onInvite,
+  onGenerateInviteLink,
   onRemoveMember,
   onUpdateMemberRole,
   onUpdateMemberName,
   onCancelInvite,
+  onResendInvite,
+  onUpdateInviteRole,
   onUpdateSettings,
   onDeleteOrg,
   highlightOrgName,
@@ -252,6 +315,15 @@ export function OrgSettings({
   const [tab, setTab] = useState("members")
   const [inviteEmail, setInviteEmail] = useState("")
   const [inviteRole, setInviteRole] = useState<"owner" | "admin" | "member">("member")
+  const [linkRole, setLinkRole] = useState<"owner" | "admin" | "member">("member")
+  const [inviteMenuOpen, setInviteMenuOpen] = useState<string | null>(null)
+  const [copiedInviteId, setCopiedInviteId] = useState<string | null>(null)
+  const [cancelingInviteId, setCancelingInviteId] = useState<string | null>(null)
+  const [generatedLink, setGeneratedLink] = useState<string | null>(null)
+  const [linkCopied, setLinkCopied] = useState(false)
+  const [emailValid, setEmailValid] = useState(false)
+  const [checkingEmail, setCheckingEmail] = useState(false)
+  const [emailInvited, setEmailInvited] = useState(false)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState("")
   const [success, setSuccess] = useState("")
@@ -262,6 +334,25 @@ export function OrgSettings({
       if (successTimeoutRef.current) clearTimeout(successTimeoutRef.current)
     }
   }, [])
+
+
+  // Validate email with debounce
+  useEffect(() => {
+    if (!inviteEmail.trim()) {
+      setEmailValid(false)
+      setCheckingEmail(false)
+      return
+    }
+
+    setCheckingEmail(true)
+    const timer = setTimeout(() => {
+      const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
+      setEmailValid(emailRegex.test(inviteEmail.trim()))
+      setCheckingEmail(false)
+    }, 300)
+
+    return () => clearTimeout(timer)
+  }, [inviteEmail])
   const [orgName, setOrgName] = useState(org.name)
   const [savingName, setSavingName] = useState(false)
   const [checkingName, setCheckingName] = useState(false)
@@ -272,6 +363,7 @@ export function OrgSettings({
   const [editingDomain, setEditingDomain] = useState(false)
   const [domainValue, setDomainValue] = useState(org.domain || "")
   const [domainError, setDomainError] = useState("")
+  const [togglingAutoJoin, setTogglingAutoJoin] = useState(false)
   const [confirmDelete, setConfirmDelete] = useState(false)
   const [deleting, setDeleting] = useState(false)
   const router = useRouter()
@@ -346,10 +438,11 @@ export function OrgSettings({
     if (result.error) {
       setError(result.error)
     } else {
-      setSuccess(`Invited ${inviteEmail}`)
-      setInviteEmail("")
-      if (successTimeoutRef.current) clearTimeout(successTimeoutRef.current)
-      successTimeoutRef.current = setTimeout(() => setSuccess(""), 3000)
+      setEmailInvited(true)
+      setTimeout(() => {
+        setEmailInvited(false)
+        setInviteEmail("")
+      }, 2000)
     }
     setLoading(false)
   }
@@ -363,19 +456,19 @@ export function OrgSettings({
   }
 
   async function handleCancelInvite(inviteId: string) {
-    setLoading(true)
+    setCancelingInviteId(inviteId)
     setError("")
     const result = await onCancelInvite(inviteId)
     if (result.error) setError(result.error)
-    setLoading(false)
+    setCancelingInviteId(null)
   }
 
   async function toggleDomainAccess() {
-    setLoading(true)
+    setTogglingAutoJoin(true)
     setError("")
     const result = await onUpdateSettings({ auto_join_domain: !org.auto_join_domain })
     if (result.error) setError(result.error)
-    setLoading(false)
+    setTogglingAutoJoin(false)
   }
 
   async function handleSaveMember(memberId: string, originalRole: "owner" | "admin" | "member") {
@@ -475,6 +568,7 @@ export function OrgSettings({
                       value={editingRole}
                       onChange={setEditingRole}
                       options={currentUserRole === "owner" ? ["owner", "admin", "member"] : ["admin", "member"]}
+                      borderless
                     />
                   ) : (
                     <span className="text-xs text-muted-foreground capitalize">{member.role}</span>
@@ -535,33 +629,71 @@ export function OrgSettings({
 
   const invitesContent = (
     <ScrollArea className="h-full">
-      <div className="p-4 space-y-8">
-        <div className="space-y-3">
+      <div className="p-4 space-y-4">
+        <div className="space-y-2">
           <label className="text-[10px] text-muted-foreground/70 uppercase tracking-wide">Email</label>
-          <form onSubmit={handleInvite} className="flex flex-col gap-2">
-            <input
-              type="email"
-              value={inviteEmail}
-              onChange={(e) => setInviteEmail(e.target.value)}
-              placeholder="email@example.com"
-              required
-              className="w-full h-9 border border-border bg-background px-3 text-sm placeholder:text-muted-foreground focus:border-foreground focus:outline-none rounded-md"
+          <form onSubmit={handleInvite} className="flex gap-2 items-center">
+            <div className="flex-1 h-10 border border-border bg-background flex items-center px-3 gap-2 focus-within:border-foreground">
+              <input
+                type="email"
+                value={inviteEmail}
+                onChange={(e) => setInviteEmail(e.target.value)}
+                placeholder="email@example.com"
+                required
+                className="flex-1 bg-transparent text-sm placeholder:text-muted-foreground focus:outline-none"
+              />
+              {checkingEmail && <Loader2 className="h-3.5 w-3.5 animate-spin text-muted-foreground flex-shrink-0" />}
+              {!checkingEmail && emailValid && (
+                <button
+                  type="submit"
+                  disabled={loading}
+                  className={`text-xs flex-shrink-0 bg-background px-1 ${emailInvited ? "text-green-500" : "text-muted-foreground hover:text-foreground"} disabled:opacity-50`}
+                >
+                  {loading ? "..." : emailInvited ? "invited" : "invite"}
+                </button>
+              )}
+            </div>
+            <RoleDropdown
+              value={inviteRole}
+              onChange={setInviteRole}
+              options={currentUserRole === "owner" ? ["member", "admin", "owner"] : ["member", "admin"]}
             />
-            <div className="flex gap-2 items-center justify-end">
-              <RoleDropdown
-                value={inviteRole}
-                onChange={setInviteRole}
-                options={currentUserRole === "owner" ? ["member", "admin", "owner"] : ["member", "admin"]}
+          </form>
+        </div>
+
+        <div className="space-y-2">
+          <label className="text-[10px] text-muted-foreground/70 uppercase tracking-wide">Link</label>
+          <div className="flex gap-2 items-center">
+            <div className="group/link relative flex-1 h-10 border border-border bg-muted/30 flex items-center px-3 min-w-0">
+              <input
+                type="text"
+                value={generatedLink || `${typeof window !== "undefined" ? window.location.origin : ""}/invite/...`}
+                readOnly
+                className="w-full bg-transparent text-sm text-muted-foreground focus:outline-none cursor-default"
               />
               <button
-                type="submit"
-                disabled={loading || !inviteEmail.trim()}
-                className="h-8 px-3 bg-foreground text-background text-xs font-medium disabled:opacity-50 rounded-md hover:opacity-90 transition-opacity"
+                type="button"
+                onClick={async () => {
+                  const result = await onGenerateInviteLink(linkRole)
+                  if (result.token) {
+                    const link = `${window.location.origin}/invite/${result.token}`
+                    setGeneratedLink(link)
+                    await navigator.clipboard.writeText(link)
+                    setLinkCopied(true)
+                    setTimeout(() => setLinkCopied(false), 2000)
+                  }
+                }}
+                className={`absolute right-3 text-xs opacity-0 group-hover/link:opacity-100 transition-opacity bg-muted px-1 ${linkCopied ? "text-green-500 opacity-100" : "text-muted-foreground hover:text-foreground"}`}
               >
-                {loading ? "..." : "invite"}
+                {linkCopied ? "copied" : "copy"}
               </button>
             </div>
-          </form>
+            <RoleDropdown
+              value={linkRole}
+              onChange={setLinkRole}
+              options={currentUserRole === "owner" ? ["member", "admin", "owner"] : ["member", "admin"]}
+            />
+          </div>
         </div>
 
         <div className="space-y-3">
@@ -571,7 +703,7 @@ export function OrgSettings({
             <button
               type="button"
               onClick={toggleDomainAccess}
-              disabled={loading || !org.domain}
+              disabled={togglingAutoJoin || !org.domain}
               className={`w-10 h-5 rounded-full transition-colors relative flex-shrink-0 disabled:opacity-50 ${org.auto_join_domain && org.domain ? "bg-foreground" : "bg-muted"}`}
             >
               <div
@@ -635,23 +767,46 @@ export function OrgSettings({
         {invites.length > 0 && (
           <div>
             <label className="text-xs text-muted-foreground mb-2 block">Pending invites</label>
-            <div className="space-y-1 border border-border rounded-md divide-y divide-border">
+            <div className="space-y-1">
               {invites.map((invite) => (
                 <div key={invite.id} className="group flex items-center justify-between py-2.5 px-3">
-                  <div className="min-w-0">
-                    <p className="text-sm truncate">{invite.email}</p>
-                    <p className="text-xs text-muted-foreground">
-                      {invite.role} · expires {new Date(invite.expires_at).toLocaleDateString()}
+                  <div className="min-w-0 w-1/3">
+                    <p className="text-[11px] truncate">{invite.email}</p>
+                    <p className="text-[9px] text-muted-foreground">
+                      expires {new Date(invite.expires_at).toLocaleDateString()}
                     </p>
                   </div>
-                  <button
-                    type="button"
-                    onClick={() => handleCancelInvite(invite.id)}
-                    disabled={loading}
-                    className="text-xs text-muted-foreground hover:text-red-400 opacity-0 group-hover:opacity-100 disabled:opacity-50 px-2"
-                  >
-                    cancel
-                  </button>
+                  <RoleDropdown
+                    value={invite.role}
+                    onChange={async (newRole) => {
+                      if (newRole !== invite.role) {
+                        setLoading(true)
+                        const result = await onUpdateInviteRole(invite.id, newRole)
+                        if (result.error) setError(result.error)
+                        setLoading(false)
+                      }
+                    }}
+                    options={currentUserRole === "owner" ? ["owner", "admin", "member"] : ["admin", "member"]}
+                    openUp
+                    borderless
+                  />
+                  {cancelingInviteId === invite.id ? (
+                    <span className="text-xs text-muted-foreground">canceling...</span>
+                  ) : copiedInviteId === invite.id ? (
+                    <span className="text-xs text-green-500">copied</span>
+                  ) : (
+                    <InviteEditMenu
+                      token={invite.token}
+                      isOpen={inviteMenuOpen === invite.id}
+                      onToggle={() => setInviteMenuOpen(inviteMenuOpen === invite.id ? null : invite.id)}
+                      onClose={() => setInviteMenuOpen(null)}
+                      onCopy={() => {
+                        setCopiedInviteId(invite.id)
+                        setTimeout(() => setCopiedInviteId(null), 2000)
+                      }}
+                      onCancel={() => handleCancelInvite(invite.id)}
+                    />
+                  )}
                 </div>
               ))}
             </div>
@@ -664,11 +819,11 @@ export function OrgSettings({
   const content = (
     <div className="flex flex-col h-full">
       <div className="px-4 pt-4 pb-2">
-        <TabsList className="w-full grid grid-cols-2 h-10">
-          <TabsTrigger data-state={tab === "members" ? "active" : "inactive"} onClick={() => setTab("members")}>
+        <TabsList className="w-full grid grid-cols-2 h-8">
+          <TabsTrigger className="text-xs" data-state={tab === "members" ? "active" : "inactive"} onClick={() => setTab("members")}>
             Members
           </TabsTrigger>
-          <TabsTrigger data-state={tab === "invites" ? "active" : "inactive"} onClick={() => setTab("invites")}>
+          <TabsTrigger className="text-xs" data-state={tab === "invites" ? "active" : "inactive"} onClick={() => setTab("invites")}>
             Invites
           </TabsTrigger>
         </TabsList>
@@ -747,7 +902,7 @@ export function OrgSettings({
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4" onClick={onClose}>
       <div
-        className="w-full max-w-md h-[520px] max-h-[85vh] flex flex-col border border-border bg-background overflow-hidden"
+        className="w-full max-w-md h-[580px] max-h-[85vh] flex flex-col border border-border bg-background overflow-hidden"
         onClick={(e) => e.stopPropagation()}
       >
         <div className="flex justify-between items-center gap-3 px-4 py-3 border-b border-border select-none flex-shrink-0">
