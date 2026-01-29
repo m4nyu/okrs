@@ -668,31 +668,8 @@ export async function deleteOrg(orgId: string) {
   const m = await checkMembership(supabase, user.id, orgId)
   if (!m || m.role !== "owner") return { error: "Only the owner can delete the organization" }
 
-  // Delete all org data in order (respecting foreign keys)
-  // 1. Delete progress updates (via key_results -> objectives)
-  const { data: objectives } = await supabase.from("objectives").select("id").eq("org_id", orgId)
-  if (objectives?.length) {
-    const objIds = objectives.map((o) => o.id)
-    const { data: keyResults } = await supabase.from("key_results").select("id").in("objective_id", objIds)
-    if (keyResults?.length) {
-      await supabase
-        .from("progress_updates")
-        .delete()
-        .in(
-          "key_result_id",
-          keyResults.map((k) => k.id)
-        )
-    }
-    // 2. Delete key results
-    await supabase.from("key_results").delete().in("objective_id", objIds)
-  }
-  // 3. Delete objectives
-  await supabase.from("objectives").delete().eq("org_id", orgId)
-  // 4. Delete invites
-  await supabase.from("org_invites").delete().eq("org_id", orgId)
-  // 5. Delete memberships
-  await supabase.from("org_members").delete().eq("org_id", orgId)
-  // 6. Delete org
+  // Delete the organization - all related data (members, invites, objectives,
+  // key_results, progress_updates) will cascade automatically via foreign keys
   const { error } = await supabase.from("organizations").delete().eq("id", orgId)
   if (error) return { error: error.message }
 
