@@ -16,6 +16,14 @@ async function checkMembership(supabase: Awaited<ReturnType<typeof createClient>
   return data
 }
 
+function generateSlug(name: string): string {
+  return name
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/(^-|-$)/g, "")
+}
+
 function revalidate() {
   revalidatePath("/", "layout")
 }
@@ -203,7 +211,25 @@ export async function updateOrg(
   if (!m || (m.role !== "owner" && m.role !== "admin")) return { error: "Not authorized" }
 
   const updates: Record<string, unknown> = { updated_at: new Date().toISOString() }
-  if (settings.name) updates.name = settings.name
+  let newSlug: string | undefined
+
+  if (settings.name) {
+    updates.name = settings.name
+    newSlug = generateSlug(settings.name)
+    if (newSlug.length < 2) return { error: "Organization name is too short" }
+
+    // Check if slug is already taken by another org
+    const { data: existing } = await admin
+      .from("organizations")
+      .select("id")
+      .eq("slug", newSlug)
+      .neq("id", orgId)
+      .single()
+    if (existing) return { error: "An organization with this name already exists" }
+
+    updates.slug = newSlug
+  }
+
   if (settings.auto_join_domain !== undefined) updates.auto_join_domain = settings.auto_join_domain
   if (settings.domain !== undefined) updates.domain = settings.domain
 
@@ -211,7 +237,7 @@ export async function updateOrg(
   if (error) return { error: error.message }
 
   revalidate()
-  return { success: true }
+  return { success: true, slug: newSlug }
 }
 
 // --- Members ---

@@ -287,7 +287,7 @@ interface OrgSettingsProps {
     name?: string
     auto_join_domain?: boolean
     domain?: string | null
-  }) => Promise<{ error?: string }>
+  }) => Promise<{ error?: string; slug?: string }>
   onDeleteOrg: () => Promise<{ error?: string }>
   highlightOrgName?: boolean
 }
@@ -425,7 +425,12 @@ export function OrgSettings({
       setSavingName(false)
       return
     }
-    window.location.reload()
+    // Redirect to new slug URL if slug changed
+    if (result.slug && result.slug !== org.slug) {
+      window.location.href = `/org/${result.slug}`
+    } else {
+      window.location.reload()
+    }
   }
 
   async function handleInvite(e: React.FormEvent) {
