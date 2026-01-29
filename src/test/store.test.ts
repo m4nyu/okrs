@@ -16,7 +16,6 @@ describe("store", () => {
       menu: null,
       tab: "members",
       range: "Q",
-      theme: "system",
     })
   })
 
@@ -26,8 +25,8 @@ describe("store", () => {
   })
 
   it("$.set updates state", () => {
-    $.set("theme", "dark")
-    expect(useStore.getState().theme).toBe("dark")
+    $.set("range", "Y")
+    expect(useStore.getState().range).toBe("Y")
   })
 
   it("$.show opens view", () => {
