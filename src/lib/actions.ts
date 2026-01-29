@@ -561,14 +561,14 @@ export async function acceptInvite(token: string) {
     .single()
 
   if (existing) {
-    await supabase.from("org_invites").delete().eq("id", inv.id)
+    await supabase.from("org_invites").delete().eq("id", inv.id).eq("org_id", inv.org_id)
     return { success: true }
   }
 
   const { error } = await supabase.from("org_members").insert({ org_id: inv.org_id, user_id: user.id, role: inv.role })
   if (error) return { error: error.message }
 
-  await supabase.from("org_invites").delete().eq("id", inv.id)
+  await supabase.from("org_invites").delete().eq("id", inv.id).eq("org_id", inv.org_id)
 
   revalidate()
   return { success: true }

@@ -14,48 +14,19 @@ export async function DELETE() {
   const admin = createAdminClient()
 
   try {
-    // Delete all user's progress updates (via key_results -> objectives)
-    const { data: objectives } = await admin.from("objectives").select("id").eq("user_id", user.id)
-
-    if (objectives && objectives.length > 0) {
-      const objectiveIds = objectives.map((o) => o.id)
-
-      // Get all key results for user's objectives
-      const { data: keyResults } = await admin.from("key_results").select("id").in("objective_id", objectiveIds)
-
-      if (keyResults && keyResults.length > 0) {
-        const krIds = keyResults.map((kr) => kr.id)
-
-        // Delete progress updates
-        await admin.from("progress_updates").delete().in("key_result_id", krIds)
-      }
-
-      // Delete key results
-      await admin.from("key_results").delete().in("objective_id", objectiveIds)
-
-      // Delete objectives
-      await admin.from("objectives").delete().eq("user_id", user.id)
-    }
-
-    // Delete user's org invites they sent
-    await admin.from("org_invites").delete().eq("invited_by", user.id)
-
-    // Delete user's org memberships
-    await admin.from("org_members").delete().eq("user_id", user.id)
-
-    // Delete organizations where user is the only member (cleanup)
-    const { data: emptyOrgs } = await admin
+    // Find organizations where user is the ONLY member and they created it
+    // These should be deleted entirely (not left as empty orgs)
+    const { data: userOrgs } = await admin
       .from("organizations")
       .select("id, org_members(id)")
       .eq("created_by", user.id)
 
-    if (emptyOrgs) {
-      for (const org of emptyOrgs) {
+    if (userOrgs) {
+      for (const org of userOrgs) {
         const memberCount = (org as any).org_members?.length || 0
-        if (memberCount === 0) {
-          // Delete org invites
-          await admin.from("org_invites").delete().eq("org_id", org.id)
-          // Delete organization
+        if (memberCount <= 1) {
+          // User is the only member - delete the org
+          // CASCADE will handle: org_members, org_invites, objectives, key_results, progress_updates
           await admin.from("organizations").delete().eq("id", org.id)
         }
       }
@@ -65,6 +36,8 @@ export async function DELETE() {
     await supabase.auth.signOut()
 
     // Delete the user from Supabase Auth
+    // CASCADE will handle: objectives (user_id), org_members (user_id), org_invites (invited_by)
+    // And further cascades: key_results (objective_id), progress_updates (key_result_id)
     const { error: deleteError } = await admin.auth.admin.deleteUser(user.id)
 
     if (deleteError) {
