@@ -1,7 +1,7 @@
 import Link from "next/link"
 import { redirect } from "next/navigation"
 import { acceptInvite } from "@/lib/actions"
-import { AuthForm } from "@/lib/components/auth"
+import { LoginForm } from "@/lib/components/auth"
 import { createClient } from "@/lib/db/server"
 
 export default async function InvitePage({ params }: { params: Promise<{ token: string }> }) {
@@ -43,7 +43,7 @@ export default async function InvitePage({ params }: { params: Promise<{ token: 
             <h1 className="text-lg font-medium mb-2">Join {(invite.organizations as any)?.name}</h1>
             <p className="text-sm text-muted-foreground">Sign in to accept your invitation</p>
           </div>
-          <AuthForm />
+          <LoginForm redirectTo={`/invite/${token}`} />
         </div>
       </div>
     )
