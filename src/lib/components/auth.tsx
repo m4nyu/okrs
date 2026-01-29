@@ -1,6 +1,7 @@
 "use client"
 
 import { Check, Loader2, Monitor, Moon, Sun, Target, X } from "lucide-react"
+import { useTheme } from "next-themes"
 import { useEffect, useRef, useState } from "react"
 import { Button } from "@/lib/components/ui/button"
 import { DottedGlowBackground } from "@/lib/components/ui/dotted-glow-background"
@@ -9,7 +10,7 @@ import { Input } from "@/lib/components/ui/input"
 import { createClient } from "@/lib/db/client"
 import { cn } from "@/lib/utils"
 
-export function AuthForm() {
+export function AuthForm({ redirectTo }: { redirectTo?: string }) {
   return (
     <div className="grid min-h-svh lg:grid-cols-2">
       <div className="flex flex-col gap-4 px-4 pt-4 pb-6 md:px-6 md:pt-6 md:pb-10">
@@ -23,7 +24,7 @@ export function AuthForm() {
         </div>
         <div className="flex flex-1 items-center justify-center">
           <div className="w-full max-w-xs">
-            <LoginForm />
+            <LoginForm redirectTo={redirectTo} />
           </div>
         </div>
       </div>
@@ -63,34 +64,11 @@ export function AuthForm() {
 }
 
 function ThemeBtn() {
-  const [t, setT] = useState<"light" | "dark" | "system">("system")
+  const { theme, setTheme } = useTheme()
   const [open, setOpen] = useState(false)
+  const [mounted, setMounted] = useState(false)
 
-  function getStoredTheme(): "light" | "dark" | "system" | null {
-    try {
-      const store = JSON.parse(localStorage.getItem("okr") || "{}")
-      return store.state?.theme || null
-    } catch {
-      return null
-    }
-  }
-
-  function setStoredTheme(theme: "light" | "dark" | "system") {
-    try {
-      const store = JSON.parse(localStorage.getItem("okr") || '{"state":{},"version":0}')
-      store.state = store.state || {}
-      store.state.theme = theme
-      localStorage.setItem("okr", JSON.stringify(store))
-    } catch {}
-  }
-
-  useEffect(() => {
-    const s = getStoredTheme()
-    if (s) {
-      setT(s)
-      apply(s)
-    }
-  }, [])
+  useEffect(() => setMounted(true), [])
   useEffect(() => {
     if (!open) return
     const close = (e: MouseEvent) => {
@@ -99,19 +77,8 @@ function ThemeBtn() {
     document.addEventListener("click", close)
     return () => document.removeEventListener("click", close)
   }, [open])
-  function apply(v: "light" | "dark" | "system") {
-    document.documentElement.classList.toggle(
-      "dark",
-      v === "dark" || (v === "system" && window.matchMedia("(prefers-color-scheme: dark)").matches)
-    )
-  }
-  function select(v: "light" | "dark" | "system") {
-    setT(v)
-    setStoredTheme(v)
-    apply(v)
-    setOpen(false)
-  }
-  const Icon = t === "light" ? Sun : t === "dark" ? Moon : Monitor
+
+  const Icon = !mounted ? Monitor : theme === "light" ? Sun : theme === "dark" ? Moon : Monitor
   return (
     <div className="fixed bottom-4 right-4 z-50" data-theme-menu>
       <button
@@ -126,8 +93,8 @@ function ThemeBtn() {
           {(["light", "dark", "system"] as const).map((v) => (
             <button
               key={v}
-              onClick={() => select(v)}
-              className={`flex w-full items-center gap-2 px-3 py-1 text-[11px] hover:bg-muted ${t === v ? "text-foreground" : "text-muted-foreground"}`}
+              onClick={() => { setTheme(v); setOpen(false) }}
+              className={`flex w-full items-center gap-2 px-3 py-1 text-[11px] hover:bg-muted ${theme === v ? "text-foreground" : "text-muted-foreground"}`}
             >
               {v === "light" && <Sun className="h-3 w-3" />}
               {v === "dark" && <Moon className="h-3 w-3" />}
@@ -145,7 +112,11 @@ function isValidEmail(email: string) {
   return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)
 }
 
-export function LoginForm({ className, ...props }: React.ComponentProps<"form">) {
+export function LoginForm({
+  className,
+  redirectTo,
+  ...props
+}: React.ComponentProps<"form"> & { redirectTo?: string }) {
   const [step, setStep] = useState<"email" | "otp">("email")
   const [email, setEmail] = useState("")
   const [emailTouched, setEmailTouched] = useState(false)
@@ -156,6 +127,17 @@ export function LoginForm({ className, ...props }: React.ComponentProps<"form">)
 
   const emailValid = isValidEmail(email)
   const showEmailError = emailTouched && email && !emailValid
+
+  // Check for OAuth callback errors in URL
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search)
+    const urlError = params.get("error")
+    if (urlError) {
+      setError(decodeURIComponent(urlError))
+      // Clean up URL
+      window.history.replaceState({}, "", window.location.pathname)
+    }
+  }, [])
 
   useEffect(() => {
     if (step === "otp") {
@@ -168,12 +150,14 @@ export function LoginForm({ className, ...props }: React.ComponentProps<"form">)
     if (!email) return
     setLoading(true)
     setError("")
+    console.log("[Auth] Sending OTP to:", email)
     const res = await fetch("/api/auth/otp", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ email }),
     })
     const data = await res.json()
+    console.log("[Auth] OTP response:", data)
     if (data.error) {
       setError(data.error)
     } else {
@@ -197,7 +181,7 @@ export function LoginForm({ className, ...props }: React.ComponentProps<"form">)
       inputRefs.current[0]?.focus()
       setLoading(false)
     } else if (data.verified) {
-      window.location.href = "/"
+      window.location.href = redirectTo || "/"
     }
   }
 
@@ -234,15 +218,20 @@ export function LoginForm({ className, ...props }: React.ComponentProps<"form">)
     setLoading(true)
     setError("")
     const supabase = createClient()
-    const { error } = await supabase.auth.signInWithOAuth({
+    const callbackUrl = `${window.location.origin}/api/auth/callback${redirectTo ? `?next=${encodeURIComponent(redirectTo)}` : ""}`
+    console.log(`[Auth] Starting ${provider} OAuth, callbackUrl:`, callbackUrl)
+    const { data, error } = await supabase.auth.signInWithOAuth({
       provider,
       options: {
-        redirectTo: `${window.location.origin}/api/auth/callback`,
+        redirectTo: callbackUrl,
         queryParams: { prompt: provider === "github" ? "consent" : "select_account" },
       },
     })
     if (error) {
+      console.error(`[Auth] ${provider} OAuth error:`, error)
       setError(error.message)
+    } else {
+      console.log(`[Auth] ${provider} OAuth initiated:`, data)
     }
     setLoading(false)
   }

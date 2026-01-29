@@ -15,6 +15,7 @@ import {
   X,
 } from "lucide-react"
 import dynamic from "next/dynamic"
+import { useTheme } from "next-themes"
 import type React from "react"
 import { useCallback, useEffect, useState } from "react"
 
@@ -96,23 +97,13 @@ function ThemeButton({
   mobileSignOut?: () => void
   mobileUserEmail?: string
 }) {
-  const theme = useStore((s) => s.theme)
+  const { theme, setTheme } = useTheme()
   const [open, setOpen] = useState(false)
+  const [mounted, setMounted] = useState(false)
 
-  useEffect(() => {
-    if (theme === "system") {
-      document.documentElement.classList.toggle("dark", window.matchMedia("(prefers-color-scheme: dark)").matches)
-    } else {
-      document.documentElement.classList.toggle("dark", theme === "dark")
-    }
-  }, [theme])
+  useEffect(() => setMounted(true), [])
 
-  const select = (v: "light" | "dark" | "system") => {
-    $.set("theme", v)
-    setOpen(false)
-  }
-
-  const Icon = theme === "light" ? Sun : theme === "dark" ? Moon : Monitor
+  const Icon = !mounted ? Monitor : theme === "light" ? Sun : theme === "dark" ? Moon : Monitor
 
   return (
     <>
@@ -133,7 +124,7 @@ function ThemeButton({
               {(["light", "dark", "system"] as const).map((v) => (
                 <button
                   key={v}
-                  onClick={() => select(v)}
+                  onClick={() => { setTheme(v); setOpen(false) }}
                   className={`px-3 py-1.5 text-xs text-left hover:bg-muted ${theme === v ? "text-foreground" : "text-muted-foreground"}`}
                 >
                   {v}
@@ -178,7 +169,7 @@ function ThemeButton({
               {(["light", "dark", "system"] as const).map((v) => (
                 <button
                   key={v}
-                  onClick={() => select(v)}
+                  onClick={() => { setTheme(v); setOpen(false) }}
                   className={`px-3 py-1.5 text-xs text-left hover:bg-muted ${theme === v ? "text-foreground" : "text-muted-foreground"}`}
                 >
                   {v}
@@ -929,6 +920,11 @@ function HistoryModal({ objective, onClose }: { objective: ObjectiveWithProgress
 
 export function Objectives({ user, org, orgRole, devMode, needsOrgName, userOrgs = [] }: Props) {
   const { view, editing, idx, hover, open: expanded, menu, objs, members, invites } = useStore()
+  const { theme, setTheme } = useTheme()
+
+  const cycleTheme = useCallback(() => {
+    setTheme(theme === "light" ? "dark" : theme === "dark" ? "system" : "light")
+  }, [theme, setTheme])
 
   const [devObjectives, setDevObjectives] = useState<ObjectiveWithProgress[]>([])
   const { data: dbObjectives = [], mutate } = useSWR(devMode ? null : `objectives-${org.id}`, () =>
@@ -990,7 +986,7 @@ export function Objectives({ user, org, orgRole, devMode, needsOrgName, userOrgs
       if (e.metaKey || e.ctrlKey) {
         if (e.key === "n" && canAddObjective && !view) $.show("objective")
         if (e.key === "," && view !== "settings") $.show("settings")
-        if (e.key === ".") $.dark()
+        if (e.key === ".") cycleTheme()
         return
       }
 
@@ -1296,6 +1292,12 @@ export function Objectives({ user, org, orgRole, devMode, needsOrgName, userOrgs
             if (!r.error) $.set("invites", await getInvites(org.id))
             return r
           }}
+          onGenerateInviteLink={async (role) => {
+            const { generateInviteLink, getInvites } = await import("@/lib/actions")
+            const r = await generateInviteLink(org.id, role)
+            if (!r.error) $.set("invites", await getInvites(org.id))
+            return r
+          }}
           onRemoveMember={async (memberId) => {
             const { removeMember, getMembers } = await import("@/lib/actions")
             const r = await removeMember(org.id, memberId)
@@ -1323,6 +1325,18 @@ export function Objectives({ user, org, orgRole, devMode, needsOrgName, userOrgs
           onCancelInvite={async (inviteId) => {
             const { cancelInvite, getInvites } = await import("@/lib/actions")
             const r = await cancelInvite(org.id, inviteId)
+            if (!r.error) $.set("invites", await getInvites(org.id))
+            return r
+          }}
+          onResendInvite={async (inviteId) => {
+            const { resendInvite, getInvites } = await import("@/lib/actions")
+            const r = await resendInvite(org.id, inviteId)
+            if (!r.error) $.set("invites", await getInvites(org.id))
+            return r
+          }}
+          onUpdateInviteRole={async (inviteId, role) => {
+            const { updateInviteRole, getInvites } = await import("@/lib/actions")
+            const r = await updateInviteRole(org.id, inviteId, role)
             if (!r.error) $.set("invites", await getInvites(org.id))
             return r
           }}
